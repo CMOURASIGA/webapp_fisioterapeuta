@@ -2793,42 +2793,7 @@ document.addEventListener('DOMContentLoaded', function(){
   document.addEventListener('DOMContentLoaded', function() {
     // Sidebar links → navegação por hash
     var items = document.querySelectorAll('#sidebar [data-route]');
-    for (var i=0;i<items.length;i++){
-      items[i].addEventListener('click', function(e){
-        var route = this.getAttribute('data-route');
-        if(route){ location.hash = route; }
-        closeSidebarMobile();
-      });
-    }
-
-    // Botão para abrir sidebar no mobile
-    var btn = document.getElementById('btn-open-sidebar');
-    if (btn) btn.addEventListener('click', openSidebarMobile);
-
-    // Router por hash
-    window.addEventListener('hashchange', applyRoute);
-    applyRoute(); // rota inicial
-  });
-})();
-
-function applyRoute(){
-  var hash = location.hash || '#/dashboard';
-  var map = {
-    '#/dashboard': 'dashboard',
-    '#/pacientes': 'patients',
-    '#/atendimentos': 'encounters',
-    '#/relatorios': 'reports'
-  };
-  var tab = map[hash] || 'dashboard';
-  try { showTab(tab); } catch(e) {}
-
-  // Ativa item no sidebar
-  var items = document.querySelectorAll('#sidebar [data-route]');
-  for (var i=0;i<items.length;i++){
-    var it = items[i];
-    if (it.getAttribute('data-route') === hash) { it.classList.add('is-active'); } else { it.classList.remove('is-active'); }
-  }
-  // Atualiza título
+    for (var i=0;i<items.length;i++){\n    var it = items[i];\n    if (it.getAttribute('data-route') === hash) { it.classList.add('is-active'); } else { it.classList.remove('is-active'); }\n  }\n  // Atualiza título
   var title = document.getElementById('page-title');
   if (title){
     var titles = {dashboard:'Dashboard',patients:'Pacientes',encounters:'Atendimentos',reports:'Relatórios'};
@@ -2867,5 +2832,6 @@ function closeDrawer(){
   if (el) el.classList.add('hidden');
 }
 </script>
+
 
 
