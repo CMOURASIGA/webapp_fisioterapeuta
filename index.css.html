@@ -1,0 +1,195 @@
+<style>
+  /* ============================================================================
+     SISTEMA FISIOTERAPIA - ESTILOS
+     ============================================================================ */
+
+  /* Variáveis de Cores */
+  :root {
+    --color-primary: #3A86B4;
+    --color-secondary: #4CC9A6;
+    --color-neutral-light: #F5F7FA;
+    --color-neutral-medium: #B0B8C1;
+    --color-text: #1E2A3B;
+    --color-error: #E57373;
+    --color-warning: #FFD166;
+    --color-success: #06D6A0;
+  }
+
+  /* Body */
+  body {
+    color: var(--color-text);
+    background-color: var(--color-neutral-light);
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+
+  /* Tabs de Navegação */
+  .tab-btn {
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  
+  .tab-btn:hover {
+    color: var(--color-primary);
+    background-color: #f8fafc;
+  }
+  
+  .tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  /* Cards de Pacientes */
+  .patient-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    background: white;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+  
+  .patient-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Botão Primário */
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.875rem;
+  }
+  
+  .btn-primary:hover {
+    background-color: #2e6d90;
+  }
+  
+  .btn-primary:active {
+    background-color: #25526e;
+  }
+
+  /* Inputs de Formulário */
+  .form-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(58, 134, 180, 0.15);
+  }
+
+  /* Animações */
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Debug Box - Caixa de Debug Verde 
+  #debug-output {
+    position: fixed;
+    top: 70px;
+    right: 10px;
+    background: #000;
+    color: #0f0;
+    padding: 10px;
+    border-radius: 5px;
+    max-width: 450px;
+    max-height: 500px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    z-index: 9999;
+    border: 2px solid #0f0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }*/
+  
+  #debug-output::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  #debug-output::-webkit-scrollbar-track {
+    background: #111;
+  }
+  
+  #debug-output::-webkit-scrollbar-thumb {
+    background: #0f0;
+    border-radius: 4px;
+  }
+
+  /* Loading Overlay */
+  #loading {
+    backdrop-filter: blur(2px);
+  }
+
+  /* Utilities */
+  .hidden {
+    display: none !important;
+  }
+
+  /* Responsividade */
+  @media (max-width: 768px) {
+    #debug-output {
+      max-width: 90%;
+      right: 5%;
+      left: 5%;
+      font-size: 10px;
+    }
+    
+    .tab-btn {
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+    }
+  }
+
+    <!-- Navbar -->
+  <nav class="bg-blue-600 text-white shadow-lg">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fas fa-heartbeat text-2xl"></i>
+        <h1 class="text-xl font-bold">Fisio System</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <button onclick="showProfessionalModal()" class="btn-primary text-xs px-3 py-1" title="Cadastrar novo profissional">
+          <i class="fas fa-user-plus mr-1"></i> Cadastrar Profissional
+        </button>
+        <span id="user-name" class="text-sm"></span>
+        <span id="user-role" class="text-xs bg-blue-700 px-2 py-1 rounded"></span>
+        <button onclick="toggleDebug()" class="text-xs opacity-30 hover:opacity-100 transition-opacity" title="Ativar/Desativar Debug">
+          <i class="fas fa-bug"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+  
+</style>

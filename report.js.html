@@ -1,0 +1,585 @@
+<script>
+/**
+ * ============================================================================
+ * RELATÓRIOS - Frontend
+ * ============================================================================
+ */
+
+var currentReportType = null;
+
+/**
+ * Seleciona tipo de relatório
+ */
+function selectReportType(type) {
+  debugLog('📊 Tipo de relatório selecionado: ' + type);
+  
+  currentReportType = type;
+  
+  // Mostra formulário
+  var container = document.getElementById('report-form-container');
+  if (container) {
+    container.classList.remove('hidden');
+  }
+  
+  // Define tipo no campo hidden
+  var typeInput = document.getElementById('report-type');
+  if (typeInput) {
+    typeInput.value = type;
+  }
+  
+  // Carrega pacientes no select
+  loadPatientsForReport();
+  
+  // Mostra/esconde período conforme tipo
+  var periodContainer = document.getElementById('report-period-container');
+  if (periodContainer) {
+    if (type === 'evolucao') {
+      periodContainer.classList.remove('hidden');
+      setDefaultDates();
+    } else {
+      periodContainer.classList.add('hidden');
+    }
+  }
+  
+  // Scroll suave até o formulário
+  container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * Cancela seleção de relatório
+ */
+function cancelReportSelection() {
+  var container = document.getElementById('report-form-container');
+  if (container) {
+    container.classList.add('hidden');
+  }
+  
+  var form = document.getElementById('report-generation-form');
+  if (form) {
+    form.reset();
+  }
+  
+  currentReportType = null;
+}
+
+/**
+ * Carrega pacientes no select
+ */
+function loadPatientsForReport() {
+  var select = document.getElementById('report-patient-select');
+  if (!select) return;
+  
+  select.innerHTML = '<option value="">Carregando pacientes...</option>';
+  
+  // Usa cache de pacientes
+  if (INITIAL_PATIENTS && INITIAL_PATIENTS.length > 0) {
+    populateReportPatientSelect(INITIAL_PATIENTS);
+    return;
+  }
+  
+  // Carrega do servidor
+  google.script.run
+    .withSuccessHandler(function(patients) {
+      populateReportPatientSelect(patients || []);
+    })
+    .withFailureHandler(function(error) {
+      select.innerHTML = '<option value="">Erro ao carregar pacientes</option>';
+      showError('Erro ao carregar pacientes: ' + error.message);
+    })
+    .getFrontendPatients();
+}
+
+/**
+ * Popula select de pacientes
+ */
+function populateReportPatientSelect(patients) {
+  var select = document.getElementById('report-patient-select');
+  if (!select) return;
+  
+  var html = '<option value="">Selecione um paciente...</option>';
+  
+  patients.forEach(function(p) {
+    var age = calculateAge(p.birth_date);
+    var cpf = p.document_id ? ' - CPF: ' + p.document_id : '';
+    html += '<option value="' + p.id + '">' + 
+            escapeHtml(p.full_name) + ' (' + age + ' anos)' + cpf + '</option>';
+  });
+  
+  select.innerHTML = html;
+}
+
+/**
+ * Define datas padrão (últimos 30 dias)
+ */
+function setDefaultDates() {
+  var today = new Date();
+  var thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+  
+  var startInput = document.getElementById('report-date-start');
+  var endInput = document.getElementById('report-date-end');
+  
+  if (startInput) {
+    startInput.value = formatDateForInput(thirtyDaysAgo);
+  }
+  
+  if (endInput) {
+    endInput.value = formatDateForInput(today);
+  }
+}
+
+/**
+ * Formata data para input[type="date"]
+ */
+function formatDateForInput(date) {
+  var year = date.getFullYear();
+  var month = ('0' + (date.getMonth() + 1)).slice(-2);
+  var day = ('0' + date.getDate()).slice(-2);
+  return year + '-' + month + '-' + day;
+}
+
+/**
+ * Processa geração de relatório
+ */
+document.addEventListener('DOMContentLoaded', function() {
+  var form = document.getElementById('report-generation-form');
+  if (form) {
+    form.addEventListener('submit', handleReportGeneration);
+  }
+});
+
+function handleReportGeneration(e) {
+  e.preventDefault();
+  
+  var patientId = document.getElementById('report-patient-select').value;
+  var reportType = document.getElementById('report-type').value;
+  var format = document.querySelector('input[name="report-format"]:checked').value;
+  
+  if (!patientId) {
+    showError('Selecione um paciente');
+    return;
+  }
+  
+  var params = {
+    patient_id: patientId,
+    type: reportType,
+    format: format
+  };
+  
+  // Adiciona período se for evolução
+  if (reportType === 'evolucao') {
+    params.date_start = document.getElementById('report-date-start').value;
+    params.date_end = document.getElementById('report-date-end').value;
+  }
+  
+  debugLog('📄 Gerando relatório...', params);
+  
+  if (format === 'print') {
+    generatePrintableReport(params);
+  } else {
+    generatePDFReport(params);
+  }
+}
+
+/**
+ * Gera relatório para impressão
+ */
+function generatePrintableReport(params) {
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(data) {
+      debugLog('✅ Dados do relatório recebidos', data);
+      hideLoading();
+      
+      if (!data || !data.patient) {
+        showError('Erro ao gerar relatório');
+        return;
+      }
+      
+      openReportWindow(data, params.type);
+    })
+    .withFailureHandler(function(error) {
+      debugLog('❌ Erro ao gerar relatório', error);
+      hideLoading();
+      showError('Erro ao gerar relatório: ' + (error.message || error));
+    })
+    .generateReportData(params);
+}
+
+/**
+ * Abre janela de impressão com relatório
+ */
+function openReportWindow(data, type) {
+  var html = '';
+  
+  switch(type) {
+    case 'avaliacao':
+      html = buildAvaliacaoHTML(data);
+      break;
+    case 'evolucao':
+      html = buildEvolucaoHTML(data);
+      break;
+    case 'alta':
+      html = buildAltaHTML(data);
+      break;
+    default:
+      showError('Tipo de relatório não implementado');
+      return;
+  }
+  
+  var printWindow = window.open('', '_blank');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  
+  // Aguarda carregamento e imprime
+  setTimeout(function() {
+    printWindow.print();
+  }, 500);
+  
+  showSuccess('Relatório gerado com sucesso!');
+}
+
+/**
+ * Gera PDF (exportação futura)
+ */
+function generatePDFReport(params) {
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      hideLoading();
+      
+      if (result && result.url) {
+        showSuccess('PDF gerado com sucesso!');
+        window.open(result.url, '_blank');
+      } else {
+        showError('Erro ao gerar PDF');
+      }
+    })
+    .withFailureHandler(function(error) {
+      hideLoading();
+      showError('Erro ao gerar PDF: ' + (error.message || error));
+    })
+    .generatePDFReport(params);
+}
+
+/**
+ * Constrói HTML da Ficha de Avaliação
+ */
+function buildAvaliacaoHTML(data) {
+  var patient = data.patient;
+  var encounters = data.encounters || [];
+  var lastEncounter = encounters[0] || {};
+  var notes = lastEncounter.notes || [];
+  var vitals = lastEncounter.vitals || [];
+  var lastNote = notes[0] || {};
+  var lastVital = vitals[0] || {};
+  
+  var html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ficha de Avaliação - ${escapeHtml(patient.full_name)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 2cm;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.4;
+      color: #000;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .header {
+      text-align: center;
+      border: 2px solid #000;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .header h1 {
+      margin: 0;
+      font-size: 16pt;
+      font-weight: bold;
+    }
+    
+    .section {
+      border: 1px solid #000;
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
+    
+    .section-header {
+      background-color: #f0f0f0;
+      padding: 5px 10px;
+      font-weight: bold;
+      border-bottom: 1px solid #000;
+    }
+    
+    .section-content {
+      padding: 10px;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .info-item {
+      display: flex;
+      border-bottom: 1px solid #ccc;
+      padding: 3px 0;
+    }
+    
+    .info-label {
+      font-weight: bold;
+      margin-right: 5px;
+      min-width: 100px;
+    }
+    
+    .info-value {
+      flex: 1;
+    }
+    
+    .text-area {
+      border: 1px solid #ccc;
+      padding: 8px;
+      min-height: 60px;
+      background-color: #fff;
+    }
+    
+    .signature-line {
+      margin-top: 40px;
+      border-top: 1px solid #000;
+      width: 300px;
+      text-align: center;
+      padding-top: 5px;
+    }
+    
+    @media print {
+      body {
+        margin: 0;
+      }
+      
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>FICHA DE AVALIAÇÃO</h1>
+  </div>
+  
+  <!-- Dados Pessoais -->
+  <div class="section">
+    <div class="section-header">Dados Pessoais do Paciente</div>
+    <div class="section-content">
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Nome:</span>
+          <span class="info-value">${escapeHtml(patient.full_name)}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Data da Avaliação:</span>
+          <span class="info-value">${formatDateBR(lastEncounter.started_at || new Date())}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Idade:</span>
+          <span class="info-value">${calculateAge(patient.birth_date)} anos</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Sexo:</span>
+          <span class="info-value">${patient.sex === 'M' ? 'Masculino' : 'Feminino'}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Peso:</span>
+          <span class="info-value">${lastVital.weight || '___'} kg</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Altura:</span>
+          <span class="info-value">${lastVital.height || '___'} cm</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Estado Civil:</span>
+          <span class="info-value">_________________</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Profissão:</span>
+          <span class="info-value">_________________</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Hobbies:</span>
+          <span class="info-value">_________________</span>
+        </div>
+      </div>
+      <div class="info-item" style="grid-column: span 2;">
+        <span class="info-label">Endereço:</span>
+        <span class="info-value">_______________________________________</span>
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Telefone:</span>
+          <span class="info-value">_________________</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">CEP:</span>
+          <span class="info-value">_________________</span>
+        </div>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Fisioterapeuta Responsável:</span>
+        <span class="info-value">${escapeHtml(lastEncounter.professional_name || '')}</span>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Diagnóstico Clínico -->
+  <div class="section">
+    <div class="section-header">Diagnóstico Clínico:</div>
+    <div class="section-content">
+      <div class="text-area">
+        ${escapeHtml(lastNote.assessment || '')}
+      </div>
+    </div>
+  </div>
+  
+  <!-- Anamnese -->
+  <div class="section">
+    <div class="section-header">Anamnese:</div>
+    <div class="section-content">
+      <p><strong>Queixa Principal:</strong></p>
+      <div class="text-area">
+        ${escapeHtml(lastNote.subjective || '')}
+      </div>
+      
+      <p style="margin-top: 15px;"><strong>Histórico da Doença Atual:</strong></p>
+      <div class="text-area"></div>
+      
+      <p style="margin-top: 15px;"><strong>Histórico da Doença Pregressa:</strong></p>
+      <div class="text-area"></div>
+      
+      <p style="margin-top: 15px;"><strong>Doenças Associadas:</strong></p>
+      <div class="text-area">
+        ${formatConditions(patient.conditions_json)}
+      </div>
+      
+      <p style="margin-top: 15px;"><strong>Hábitos de Vida:</strong></p>
+      <div class="text-area"></div>
+      
+      <p style="margin-top: 15px;"><strong>Histórico Familiar:</strong></p>
+      <div class="text-area"></div>
+      
+      <p style="margin-top: 15px;"><strong>Medicações em uso:</strong></p>
+      <div class="text-area"></div>
+    </div>
+  </div>
+  
+  <!-- Condições Pessoais -->
+  <div class="section">
+    <div class="section-header">Condições Pessoais</div>
+    <div class="section-content">
+      <div class="text-area">
+        <strong>Alergias:</strong> ${formatAllergies(patient.allergies_json)}
+      </div>
+    </div>
+  </div>
+  
+  <!-- Assinatura -->
+  <div style="margin-top: 40px; text-align: right;">
+    <div class="signature-line">
+      Fisioterapeuta Responsável<br/>
+      ${escapeHtml(lastEncounter.professional_name || '')}<br/>
+      CREFITO: ${escapeHtml(lastEncounter.professional_crefito || '')}
+    </div>
+  </div>
+  
+  <div class="no-print" style="position: fixed; top: 10px; right: 10px;">
+    <button onclick="window.print()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">
+      🖨️ Imprimir
+    </button>
+    <button onclick="window.close()" style="padding: 10px 20px; background: #6b7280; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">
+      ❌ Fechar
+    </button>
+  </div>
+</body>
+</html>
+  `;
+  
+  return html;
+}
+
+/**
+ * Formata alergias
+ */
+function formatAllergies(jsonStr) {
+  try {
+    var allergies = JSON.parse(jsonStr || '[]');
+    return Array.isArray(allergies) && allergies.length > 0 
+      ? allergies.join(', ') 
+      : 'Nenhuma alergia registrada';
+  } catch (e) {
+    return 'Nenhuma alergia registrada';
+  }
+}
+
+/**
+ * Formata condições
+ */
+function formatConditions(jsonStr) {
+  try {
+    var conditions = JSON.parse(jsonStr || '[]');
+    return Array.isArray(conditions) && conditions.length > 0 
+      ? conditions.join(', ') 
+      : 'Nenhuma condição registrada';
+  } catch (e) {
+    return 'Nenhuma condição registrada';
+  }
+}
+
+/**
+ * Formata data BR (dd/MM/yyyy)
+ */
+function formatDateBR(date) {
+  if (!date) return '__/__/____';
+  
+  try {
+    var d = new Date(date);
+    var day = ('0' + d.getDate()).slice(-2);
+    var month = ('0' + (d.getMonth() + 1)).slice(-2);
+    var year = d.getFullYear();
+    return day + '/' + month + '/' + year;
+  } catch (e) {
+    return '__/__/____';
+  }
+}
+
+/**
+ * Constrói HTML de Evolução (simplificado)
+ */
+function buildEvolucaoHTML(data) {
+  // Implementação simplificada - pode ser expandida
+  return buildAvaliacaoHTML(data);
+}
+
+/**
+ * Constrói HTML de Alta (simplificado)
+ */
+function buildAltaHTML(data) {
+  // Implementação simplificada - pode ser expandida
+  return buildAvaliacaoHTML(data);
+}
+
+console.log('✅ Módulo de relatórios carregado');
+</script>

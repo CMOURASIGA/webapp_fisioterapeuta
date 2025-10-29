@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Fisioterapia</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    var PATIENTS_DATA = <?!= patientsJson ?>;
+    console.log('📦 Pacientes injetados:', PATIENTS_DATA);
+  </script>
+  <?!= include('index.css'); ?>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <!-- Navbar -->
+  <nav class="bg-blue-600 text-white shadow-lg">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fas fa-heartbeat text-2xl"></i>
+        <h1 class="text-xl font-bold">Fisio System</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <span id="user-name" class="text-sm"></span>
+        <span id="user-role" class="text-xs bg-blue-700 px-2 py-1 rounded"></span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Container Principal -->
+  <div class="container mx-auto px-4 py-6">
+    <!-- Tabs -->
+    <div class="bg-white rounded-lg shadow mb-6">
+      <div class="flex border-b">
+        <button onclick="showTab('dashboard', event)" class="tab-btn active px-6 py-3 font-semibold">
+          <i class="fas fa-home mr-2"></i>Dashboard
+        </button>
+        <button onclick="showTab('patients', event)" class="tab-btn px-6 py-3 font-semibold">
+          <i class="fas fa-users mr-2"></i>Pacientes
+        </button>
+        <button onclick="showTab('encounters', event)" class="tab-btn px-6 py-3 font-semibold">
+          <i class="fas fa-clipboard-list mr-2"></i>Atendimentos
+        </button>
+        <button onclick="showTab('reports', event)" class="tab-btn px-6 py-3 font-semibold">
+          <i class="fas fa-chart-line mr-2"></i>Relatórios
+        </button>
+      </div>
+    </div>
+
+    <!-- Conteúdo das Tabs -->
+    <div id="tab-content">
+      <!-- Dashboard -->
+      <div id="dashboard-tab" class="tab-content">
+        <!-- 3.1 - BOTÃO DE CADASTRO DE PROFISSIONAL -->
+        <div class="mb-6 flex justify-end">
+          <button onclick="showProfessionalModal()" class="btn-primary">
+            <i class="fas fa-user-md mr-2"></i>Cadastrar Profissional
+          </button>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white p-6 rounded-lg shadow">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-500 text-sm">Pacientes Ativos</p>
+                <p class="text-3xl font-bold text-blue-600" id="stat-patients">-</p>
+              </div>
+              <i class="fas fa-users text-4xl text-blue-200"></i>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-lg shadow">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-500 text-sm">Atendimentos Hoje</p>
+                <p class="text-3xl font-bold text-green-600" id="stat-today">0</p>
+              </div>
+              <i class="fas fa-calendar-check text-4xl text-green-200"></i>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-lg shadow">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-gray-500 text-sm">Reavaliações Pendentes</p>
+                <p class="text-3xl font-bold text-orange-600" id="stat-pending">0</p>
+              </div>
+              <i class="fas fa-exclamation-triangle text-4xl text-orange-200"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pacientes -->
+      <div id="patients-tab" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Pacientes</h2>
+            <button onclick="showNewPatientModal()" class="btn-primary">
+              <i class="fas fa-plus mr-2"></i>Novo Paciente
+            </button>
+          </div>
+          <div class="mb-4">
+            <input type="text" id="patient-search" placeholder="Buscar por nome ou CPF..." 
+                   class="w-full px-4 py-2 border rounded-lg" onkeyup="searchPatients()" />
+          </div>
+          <div id="patients-list">
+            <p class="text-gray-500 text-center py-8">Carregando pacientes...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Atendimentos (2.1 - BOTÃO REMOVIDO) -->
+      <div id="encounters-tab" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+          <!-- Filtro de Paciente -->
+          <div class="mb-6 border-b pb-4">
+            <h2 class="text-xl font-bold mb-4">
+              <i class="fas fa-clipboard-list mr-2 text-blue-600"></i>Atendimentos
+            </h2>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+              <p class="text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>
+                Selecione um paciente para visualizar seus atendimentos
+              </p>
+            </div>
+            
+            <div class="flex gap-3">
+              <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                  Buscar Paciente
+                </label>
+                <select id="encounter-patient-filter" 
+                        class="form-input w-full px-4 py-2 border rounded-lg"
+                        onchange="loadPatientEncounters()">
+                  <option value="">Selecione um paciente...</option>
+                </select>
+              </div>
+              
+              <div class="flex items-end">
+                <button onclick="clearEncounterFilter()" 
+                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  <i class="fas fa-times mr-2"></i>Limpar
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Lista de Atendimentos -->
+          <div id="encounters-list">
+            <div class="text-center py-12 text-gray-400">
+              <i class="fas fa-filter text-6xl mb-4"></i>
+              <p class="text-lg">Nenhum paciente selecionado</p>
+              <p class="text-sm">Use o filtro acima para buscar atendimentos</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Relatórios -->
+      <!-- Relatórios - SUBSTITUA a aba reports-tab no index.html -->
+      <div id="reports-tab" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-2xl font-bold mb-6">
+            <i class="fas fa-chart-line mr-2 text-blue-600"></i>Relatórios e Documentos
+          </h2>
+          
+          <!-- Seleção de Tipo de Relatório -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- Ficha de Avaliação -->
+            <div class="border-2 border-blue-200 rounded-lg p-6 hover:border-blue-500 cursor-pointer transition-all" onclick="selectReportType('avaliacao')">
+              <div class="text-center">
+                <i class="fas fa-clipboard-check text-5xl text-blue-600 mb-3"></i>
+                <h3 class="font-bold text-lg mb-2">Ficha de Avaliação</h3>
+                <p class="text-sm text-gray-600">Ficha completa de avaliação fisioterapêutica com anamnese</p>
+              </div>
+            </div>
+            
+            <!-- Evolução Clínica -->
+            <div class="border-2 border-green-200 rounded-lg p-6 hover:border-green-500 cursor-pointer transition-all" onclick="selectReportType('evolucao')">
+              <div class="text-center">
+                <i class="fas fa-notes-medical text-5xl text-green-600 mb-3"></i>
+                <h3 class="font-bold text-lg mb-2">Evolução Clínica</h3>
+                <p class="text-sm text-gray-600">Histórico de atendimentos e evolução do paciente</p>
+              </div>
+            </div>
+            
+            <!-- Relatório de Alta -->
+            <div class="border-2 border-purple-200 rounded-lg p-6 hover:border-purple-500 cursor-pointer transition-all" onclick="selectReportType('alta')">
+              <div class="text-center">
+                <i class="fas fa-file-medical text-5xl text-purple-600 mb-3"></i>
+                <h3 class="font-bold text-lg mb-2">Relatório de Alta</h3>
+                <p class="text-sm text-gray-600">Relatório completo para alta hospitalar</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Formulário de Geração -->
+          <div id="report-form-container" class="hidden">
+            <div class="bg-gray-50 border-2 border-gray-200 rounded-lg p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">
+                  <i class="fas fa-cog mr-2"></i>Configurar Relatório
+                </h3>
+                <button onclick="cancelReportSelection()" class="text-gray-500 hover:text-gray-700">
+                  <i class="fas fa-times"></i> Cancelar
+                </button>
+              </div>
+              
+              <form id="report-generation-form" class="space-y-4">
+                <input type="hidden" id="report-type" />
+                
+                <!-- Seleção de Paciente -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Paciente <span class="text-red-500">*</span>
+                  </label>
+                  <select id="report-patient-select" required class="form-input w-full px-3 py-2 border rounded-lg">
+                    <option value="">Selecione um paciente...</option>
+                  </select>
+                </div>
+                
+                <!-- Período (para evolução) -->
+                <div id="report-period-container" class="hidden grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                      Data Inicial
+                    </label>
+                    <input type="date" id="report-date-start" class="form-input w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                      Data Final
+                    </label>
+                    <input type="date" id="report-date-end" class="form-input w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+                
+                <!-- Formato de Saída -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Formato de Saída
+                  </label>
+                  <div class="flex space-x-4">
+                    <label class="flex items-center">
+                      <input type="radio" name="report-format" value="docs" checked class="mr-2" />
+                      <i class="fas fa-file-word mr-1 text-blue-600"></i> Abrir no Google Docs
+                    </label>
+                  </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="flex justify-end space-x-3 pt-4 border-t">
+                  <button type="button" onclick="cancelReportSelection()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                  <button type="submit" class="btn-primary px-6 py-2">
+                    <i class="fas fa-file-download mr-2"></i>Gerar Relatório
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <!-- Histórico de Relatórios -->
+          <div class="mt-8">
+            <h3 class="text-lg font-bold mb-4">
+              <i class="fas fa-history mr-2"></i>Relatórios Gerados Recentemente
+            </h3>
+            <div id="reports-history" class="space-y-2">
+              <p class="text-gray-500 text-sm italic">Nenhum relatório gerado ainda</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-lg">
+      <i class="fas fa-spinner fa-spin text-4xl text-blue-600"></i>
+      <p class="mt-2">Carregando...</p>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <?!= include('index.js'); ?>
+</body>
+</html>

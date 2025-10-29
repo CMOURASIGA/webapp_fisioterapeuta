@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ficha de Avaliação - Sistema Fisioterapia</title>
+  <style>
+    /* ========================================
+       ESTILOS PARA IMPRESSÃO E VISUALIZAÇÃO
+       ======================================== */
+    
+    @page {
+      size: A4;
+      margin: 1.5cm;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11pt;
+      line-height: 1.4;
+      color: #000;
+      background: #fff;
+      padding: 20px;
+    }
+    
+    /* Cabeçalho principal */
+    .header {
+      text-align: center;
+      border: 2px solid #000;
+      padding: 12px;
+      margin-bottom: 20px;
+      background: #f9f9f9;
+    }
+    
+    .header h1 {
+      font-size: 18pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    
+    /* Seções do formulário */
+    .section {
+      border: 2px solid #000;
+      margin-bottom: 15px;
+      page-break-inside: avoid;
+    }
+    
+    .section-header {
+      background-color: #e0e0e0;
+      padding: 6px 10px;
+      font-weight: bold;
+      font-size: 11pt;
+      border-bottom: 2px solid #000;
+    }
+    
+    .section-content {
+      padding: 10px;
+    }
+    
+    /* Tabela de dados pessoais */
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 5px;
+    }
+    
+    .info-table td {
+      border: 1px solid #666;
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+    
+    .info-table .label {
+      font-weight: bold;
+      background: #f5f5f5;
+      width: 120px;
+    }
+    
+    .info-table .value {
+      min-height: 22px;
+    }
+    
+    /* Linha dupla (2 campos por linha) */
+    .info-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    
+    .info-item {
+      display: flex;
+      border-bottom: 1px solid #666;
+      padding: 3px 0;
+    }
+    
+    .info-item .label {
+      font-weight: bold;
+      min-width: 100px;
+    }
+    
+    .info-item .value {
+      flex: 1;
+      border-bottom: 1px dotted #999;
+    }
+    
+    /* Campos de texto grande */
+    .text-field {
+      border: 1px solid #666;
+      min-height: 80px;
+      padding: 6px;
+      margin-top: 8px;
+      background: #fff;
+      white-space: pre-wrap;
+    }
+    
+    .text-field.small {
+      min-height: 40px;
+    }
+    
+    .field-label {
+      font-weight: bold;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      display: block;
+    }
+    
+    /* Assinatura */
+    .signature-area {
+      margin-top: 40px;
+      text-align: center;
+    }
+    
+    .signature-line {
+      border-top: 1px solid #000;
+      width: 350px;
+      margin: 0 auto;
+      padding-top: 6px;
+      font-size: 10pt;
+    }
+    
+    /* Botões de ação (não imprimem) */
+    .action-buttons {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-print {
+      background: #3b82f6;
+      color: white;
+    }
+    
+    .btn-print:hover {
+      background: #2563eb;
+    }
+    
+    .btn-close {
+      background: #6b7280;
+      color: white;
+    }
+    
+    .btn-close:hover {
+      background: #4b5563;
+    }
+    
+    /* Esconde botões na impressão */
+    @media print {
+      .action-buttons {
+        display: none !important;
+      }
+      
+      body {
+        padding: 0;
+      }
+    }
+    
+    /* Responsivo para telas pequenas */
+    @media screen and (max-width: 768px) {
+      body {
+        padding: 10px;
+        font-size: 10pt;
+      }
+      
+      .info-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .action-buttons {
+        position: static;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Botões de Ação -->
+  <div class="action-buttons">
+    <button onclick="window.print()" class="btn btn-print">
+      🖨️ Imprimir
+    </button>
+    <button onclick="window.close()" class="btn btn-close">
+      ✖ Fechar
+    </button>
+  </div>
+
+  <!-- Cabeçalho -->
+  <div class="header">
+    <h1>FICHA DE AVALIAÇÃO</h1>
+  </div>
+
+  <!-- ========================================
+       DADOS PESSOAIS DO PACIENTE
+       ======================================== -->
+  <div class="section">
+    <div class="section-header">
+      Dados Pessoais do Paciente:
+      <span style="float: right;">Data da Avaliação: <span id="data-avaliacao">__/__/____</span></span>
+    </div>
+    <div class="section-content">
+      <table class="info-table">
+        <tr>
+          <td class="label">Nome:</td>
+          <td class="value" colspan="3" id="paciente-nome"></td>
+        </tr>
+        <tr>
+          <td class="label">Idade:</td>
+          <td class="value" id="paciente-idade"></td>
+          <td class="label">Sexo:</td>
+          <td class="value" id="paciente-sexo"></td>
+        </tr>
+        <tr>
+          <td class="label">Profissão:</td>
+          <td class="value" id="paciente-profissao">___________________</td>
+          <td class="label">Hobbies:</td>
+          <td class="value" id="paciente-hobbies">___________________</td>
+        </tr>
+        <tr>
+          <td class="label">Peso:</td>
+          <td class="value" id="paciente-peso">___ kg</td>
+          <td class="label">Altura:</td>
+          <td class="value" id="paciente-altura">___ cm</td>
+        </tr>
+        <tr>
+          <td class="label">Estado Civil:</td>
+          <td class="value" id="paciente-estado-civil">___________________</td>
+          <td class="label">CPF:</td>
+          <td class="value" id="paciente-cpf"></td>
+        </tr>
+        <tr>
+          <td class="label">Endereço:</td>
+          <td class="value" colspan="3" id="paciente-endereco">_________________________________________________</td>
+        </tr>
+        <tr>
+          <td class="label">Telefone:</td>
+          <td class="value" id="paciente-telefone">___________________</td>
+          <td class="label">CEP:</td>
+          <td class="value" id="paciente-cep">___________________</td>
+        </tr>
+        <tr>
+          <td class="label">Fisioterapeuta Responsável:</td>
+          <td class="value" colspan="3" id="fisioterapeuta-nome"></td>
+        </tr>
+        <tr>
+          <td class="label">CREFITO:</td>
+          <td class="value" colspan="3" id="fisioterapeuta-crefito"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ========================================
+       DIAGNÓSTICO CLÍNICO
+       ======================================== -->
+  <div class="section">
+    <div class="section-header">Diagnóstico Clínico:</div>
+    <div class="section-content">
+      <div class="text-field small" id="diagnostico-clinico"></div>
+    </div>
+  </div>
+
+  <!-- ========================================
+       ANAMNESE
+       ======================================== -->
+  <div class="section">
+    <div class="section-header">Anamnese:</div>
+    <div class="section-content">
+      <span class="field-label">Queixa Principal:</span>
+      <div class="text-field" id="queixa-principal"></div>
+      
+      <span class="field-label">Histórico da Doença Atual:</span>
+      <div class="text-field" id="historico-atual"></div>
+      
+      <span class="field-label">Histórico da Doença Pregressa:</span>
+      <div class="text-field" id="historico-pregresso"></div>
+      
+      <span class="field-label">Doenças Associadas:</span>
+      <div class="text-field" id="doencas-associadas"></div>
+      
+      <span class="field-label">Hábitos de Vida:</span>
+      <div class="text-field" id="habitos-vida"></div>
+      
+      <span class="field-label">Histórico Familiar:</span>
+      <div class="text-field" id="historico-familiar"></div>
+      
+      <span class="field-label">Medicações em uso:</span>
+      <div class="text-field" id="medicacoes"></div>
+    </div>
+  </div>
+
+  <!-- ========================================
+       CONDIÇÕES PESSOAIS
+       ======================================== -->
+  <div class="section">
+    <div class="section-header">Condições Pessoais</div>
+    <div class="section-content">
+      <span class="field-label">Alergias:</span>
+      <div class="text-field small" id="alergias"></div>
+    </div>
+  </div>
+
+  <!-- ========================================
+       ASSINATURA
+       ======================================== -->
+  <div class="signature-area">
+    <div class="signature-line">
+      <div style="margin-bottom: 5px;">_________________________________</div>
+      <strong>Fisioterapeuta Responsável</strong><br>
+      <span id="assinatura-fisio"></span><br>
+      CREFITO: <span id="assinatura-crefito"></span>
+    </div>
+    <div style="margin-top: 20px; font-size: 10pt;">
+      Data: <span id="data-assinatura"></span>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * SCRIPT DE PREENCHIMENTO AUTOMÁTICO
+     * ============================================================================
+     */
+    
+    // Função para preencher campos com dados do paciente
+    function preencherFicha(dados) {
+      console.log('📋 Preenchendo ficha com dados:', dados);
+      
+      // Dados do paciente
+      if (dados.patient) {
+        const p = dados.patient;
+        
+        // Informações básicas
+        setTextContent('paciente-nome', p.full_name || '');
+        setTextContent('paciente-idade', calcularIdade(p.birth_date) + ' anos');
+        setTextContent('paciente-sexo', p.sex === 'M' ? 'Masculino' : 'Feminino');
+        setTextContent('paciente-cpf', formatarCPF(p.document_id || ''));
+        
+        // Alergias
+        const alergias = parseJSON(p.allergies_json, []);
+        setTextContent('alergias', alergias.length > 0 ? alergias.join(', ') : 'Nenhuma alergia registrada');
+        
+        // Condições/doenças associadas
+        const condicoes = parseJSON(p.conditions_json, []);
+        setTextContent('doencas-associadas', condicoes.length > 0 ? condicoes.join(', ') : 'Nenhuma condição registrada');
+      }
+      
+      // Dados do profissional
+      if (dados.professional) {
+        const prof = dados.professional;
+        setTextContent('fisioterapeuta-nome', prof.full_name || '');
+        setTextContent('fisioterapeuta-crefito', prof.crefito || '');
+        setTextContent('assinatura-fisio', prof.full_name || '');
+        setTextContent('assinatura-crefito', prof.crefito || '');
+      }
+      
+      // Dados do último atendimento
+      if (dados.encounters && dados.encounters.length > 0) {
+        const ultimoAtendimento = dados.encounters[0];
+        
+        // Data da avaliação
+        setTextContent('data-avaliacao', formatarData(ultimoAtendimento.started_at));
+        setTextContent('data-assinatura', formatarData(ultimoAtendimento.started_at));
+        
+        // Notas SOAP
+        if (ultimoAtendimento.notes && ultimoAtendimento.notes.length > 0) {
+          const nota = ultimoAtendimento.notes[0];
+          setTextContent('queixa-principal', nota.subjective || '');
+          setTextContent('historico-atual', nota.objective || '');
+          setTextContent('diagnostico-clinico', nota.assessment || '');
+        }
+        
+        // Sinais vitais
+        if (ultimoAtendimento.vitals && ultimoAtendimento.vitals.length > 0) {
+          const vital = ultimoAtendimento.vitals[0];
+          if (vital.weight) setTextContent('paciente-peso', vital.weight + ' kg');
+          if (vital.height) setTextContent('paciente-altura', vital.height + ' cm');
+        }
+      }
+      
+      console.log('✅ Ficha preenchida');
+    }
+    
+    // Função auxiliar para definir conteúdo de texto
+    function setTextContent(id, text) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = text;
+      }
+    }
+    
+    // Função para calcular idade
+    function calcularIdade(dataNascimento) {
+      if (!dataNascimento) return 0;
+      
+      const hoje = new Date();
+      const nascimento = new Date(dataNascimento);
+      let idade = hoje.getFullYear() - nascimento.getFullYear();
+      const mes = hoje.getMonth() - nascimento.getMonth();
+      
+      if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getDate())) {
+        idade--;
+      }
+      
+      return idade;
+    }
+    
+    // Função para formatar CPF
+    function formatarCPF(cpf) {
+      if (!cpf) return '';
+      
+      const numeros = cpf.replace(/\D/g, '');
+      return numeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    
+    // Função para formatar data
+    function formatarData(dataISO) {
+      if (!dataISO) return '__/__/____';
+      
+      const data = new Date(dataISO);
+      const dia = String(data.getDate()).padStart(2, '0');
+      const mes = String(data.getMonth() + 1).padStart(2, '0');
+      const ano = data.getFullYear();
+      
+      return `${dia}/${mes}/${ano}`;
+    }
+    
+    // Parse seguro de JSON
+    function parseJSON(str, fallback) {
+      try {
+        return JSON.parse(str || '[]');
+      } catch (e) {
+        return fallback;
+      }
+    }
+    
+    // Verifica se há dados passados via URL ou variável global
+    window.addEventListener('DOMContentLoaded', function() {
+      console.log('📄 Ficha de Avaliação carregada');
+      
+      // Tenta obter dados de uma variável global injetada
+      if (typeof FICHA_DATA !== 'undefined') {
+        preencherFicha(FICHA_DATA);
+      } else {
+        console.log('⚠️ Dados não encontrados - campos ficarão vazios');
+      }
+    });
+    
+    // Expõe função globalmente para uso externo
+    window.preencherFicha = preencherFicha;
+  </script>
+</body>
+</html>
