@@ -49,25 +49,6 @@
     <div class="bg-white rounded-lg border border-brand-gray-20 px-4 py-3 mb-4">
       <h2 id="page-title" class="text-xl font-semibold text-brand-blue-500">Dashboard</h2>
     </div>
-    <!-- Tabs -->
-    <div class="bg-white rounded-lg shadow mb-6">
-      <div class="flex border-b">
-        <button onclick="showTab('dashboard', event)" class="tab-btn active px-6 py-3 font-semibold">
-          <i class="fas fa-home mr-2"></i>Dashboard
-        </button>
-        <button onclick="showTab('patients', event)" class="tab-btn px-6 py-3 font-semibold">
-          <i class="fas fa-users mr-2"></i>Pacientes
-        </button>
-        <button onclick="showTab('encounters', event)" class="tab-btn px-6 py-3 font-semibold">
-          <i class="fas fa-clipboard-list mr-2"></i>Atendimentos
-        </button>
-        <button onclick="showTab('reports', event)" class="tab-btn px-6 py-3 font-semibold">
-          <i class="fas fa-chart-line mr-2"></i>Relatórios
-        </button>
-      </div>
-    </div>
-
-    <!-- Conteúdo das Tabs -->
     <div id="tab-content">
       <!-- Dashboard -->
       <div id="dashboard-tab" class="tab-content">
@@ -324,3 +305,4 @@
   <?!= include('index.js'); ?>
 </body>
 </html>
+
