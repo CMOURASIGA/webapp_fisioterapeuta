@@ -14,6 +14,7 @@
     --brand-gray-20:#E3E3E3;   /* bordas/divisores */
     --brand-gray-600:#666666;  /* texto padrão */
     --brand-blue-500:#004C99;  /* institucional */
+    --brand-emerald: var(--brand-green-200); /* alias verde-esmeralda */
     --brand-red-600:#DC2626;   /* alerta */
     --radius:10px;
 
@@ -127,6 +128,9 @@
   .text-brand-gray-600{ color: var(--brand-gray-600) }
   .bg-brand-gray-10{ background: var(--brand-gray-10) }
   .bg-brand-gray-20{ background: var(--brand-gray-20) }
+  .bg-brand-green-200{ background: var(--brand-green-200) }
+  .bg-brand-green-300{ background: var(--brand-green-300) }
+  .bg-brand-emerald{ background: var(--brand-emerald) }
   .border-brand-gray-20{ border-color: var(--brand-gray-20) }
   .rounded-lg{ border-radius: var(--radius) }
   .rounded-md{ border-radius: calc(var(--radius) - 2px) }
@@ -134,7 +138,7 @@
   .badge{ border-radius:9999px; font-weight:600; font-size:.75rem; padding:.25rem .75rem }
   .badge--stable{ background: var(--brand-green-100); color:#fff }
   /* Sidebar (dark blue) */
-  .sidebar{ background: var(--brand-blue-500); color:#fff }
+  .sidebar{ background: var(--brand-emerald); color:#fff }
   .nav-item{ color:#fff; opacity:.9; display:flex; align-items:center; gap:.5rem; width:100%; padding:.5rem .75rem; border-radius:8px; }
   .nav-item:hover{ background: rgba(255,255,255,0.08) }
   .nav-item.is-active{ background: rgba(255,255,255,0.12); font-weight:600; }
