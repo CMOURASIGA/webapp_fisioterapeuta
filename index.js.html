@@ -2826,9 +2826,7 @@ function applyRoute(){
   var items = document.querySelectorAll('#sidebar [data-route]');
   for (var i=0;i<items.length;i++){
     var it = items[i];
-    if (it.getAttribute('data-route') === hash) {
-      it.classList.add('bg-brand-gray-10','border','border-brand-gray-20');
-    } else {
+    if (it.getAttribute('data-route') === hash) it.classList.add('is-active'); else it.classList.remove('is-active'); else {
       it.classList.remove('bg-brand-gray-10','border','border-brand-gray-20');
     }
   }
@@ -2871,3 +2869,4 @@ function closeDrawer(){
   if (el) el.classList.add('hidden');
 }
 </script>
+

@@ -31,9 +31,9 @@
 
   <!-- Sidebar + Overlay -->
   <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-40" onclick="closeSidebarMobile()"></div>
-  <aside id="sidebar" class="fixed inset-y-0 left-0 w-72 bg-white border-r border-brand-gray-20 hidden lg:block z-50">
-    <div class="px-4 py-4 border-b border-brand-gray-20">
-      <h1 class="text-lg font-semibold text-brand-blue-500">Fisio System</h1>
+  <aside id="sidebar" class="fixed inset-y-0 left-0 w-72 sidebar hidden lg:block z-50">
+    <div class="px-4 py-4 border-b border-brand-gray-20 border-opacity-20">
+      <h1 class="text-lg font-semibold">Fisio System</h1>
     </div>
     <nav class="p-4 space-y-1" aria-label="Navegação principal">
       <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/dashboard"><i class="fas fa-home mr-2"></i>Dashboard</button>
@@ -46,6 +46,9 @@
   <!-- Container Principal -->
   <div class="lg:pl-72">
   <div class="container mx-auto px-4 py-6">
+    <div class="bg-white rounded-lg border border-brand-gray-20 px-4 py-3 mb-4">
+      <h2 id="page-title" class="text-xl font-semibold text-brand-blue-500">Dashboard</h2>
+    </div>
     <!-- Tabs -->
     <div class="bg-white rounded-lg shadow mb-6">
       <div class="flex border-b">
