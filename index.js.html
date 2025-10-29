@@ -2784,3 +2784,90 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 });
 </script>
+<script>
+// =============================================================================
+// Navegação lateral (router por hash) + Drawer base
+// =============================================================================
+
+(function initShell() {
+  document.addEventListener('DOMContentLoaded', function() {
+    // Sidebar links → navegação por hash
+    var items = document.querySelectorAll('#sidebar [data-route]');
+    for (var i=0;i<items.length;i++){
+      items[i].addEventListener('click', function(e){
+        var route = this.getAttribute('data-route');
+        if(route){ location.hash = route; }
+        closeSidebarMobile();
+      });
+    }
+
+    // Botão para abrir sidebar no mobile
+    var btn = document.getElementById('btn-open-sidebar');
+    if (btn) btn.addEventListener('click', openSidebarMobile);
+
+    // Router por hash
+    window.addEventListener('hashchange', applyRoute);
+    applyRoute(); // rota inicial
+  });
+})();
+
+function applyRoute(){
+  var hash = location.hash || '#/dashboard';
+  var map = {
+    '#/dashboard': 'dashboard',
+    '#/pacientes': 'patients',
+    '#/atendimentos': 'encounters',
+    '#/relatorios': 'reports'
+  };
+  var tab = map[hash] || 'dashboard';
+  try { showTab(tab); } catch(e) {}
+
+  // Ativa item no sidebar
+  var items = document.querySelectorAll('#sidebar [data-route]');
+  for (var i=0;i<items.length;i++){
+    var it = items[i];
+    if (it.getAttribute('data-route') === hash) {
+      it.classList.add('bg-brand-gray-10','border','border-brand-gray-20');
+    } else {
+      it.classList.remove('bg-brand-gray-10','border','border-brand-gray-20');
+    }
+  }
+  // Atualiza título
+  var title = document.getElementById('page-title');
+  if (title){
+    var titles = {dashboard:'Dashboard',patients:'Pacientes',encounters:'Atendimentos',reports:'Relatórios'};
+    title.textContent = titles[tab] || 'Fisio System';
+  }
+}
+
+function openSidebarMobile(){
+  var overlay = document.getElementById('sidebar-overlay');
+  var aside = document.getElementById('sidebar');
+  if (overlay) overlay.classList.remove('hidden');
+  if (aside) aside.classList.remove('hidden');
+}
+function closeSidebarMobile(){
+  var overlay = document.getElementById('sidebar-overlay');
+  var aside = document.getElementById('sidebar');
+  if (overlay) overlay.classList.add('hidden');
+  if (aside && window.innerWidth < 1024) aside.classList.add('hidden');
+}
+
+// Drawer base reutilizável
+function openDrawer(opts){
+  var el = document.getElementById('drawer');
+  if (!el) return;
+  document.getElementById('drawer-title').textContent = (opts && opts.title) || '';
+  document.getElementById('drawer-body').innerHTML = (opts && opts.bodyHtml) || '';
+  var primary = document.getElementById('drawer-primary');
+  if (primary){
+    primary.onclick = function(){ if (opts && typeof opts.onPrimary === 'function') opts.onPrimary(); };
+    primary.textContent = (opts && opts.primaryText) || 'Confirmar';
+  }
+  el.classList.remove('hidden');
+}
+function closeDrawer(){
+  var el = document.getElementById('drawer');
+  if (el) el.classList.add('hidden');
+}
+</script>

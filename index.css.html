@@ -3,16 +3,29 @@
      SISTEMA FISIOTERAPIA - ESTILOS
      ============================================================================ */
 
-  /* Variáveis de Cores */
+  /* Fonte e Tokens de Cores (Manual Visual) */
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
   :root {
-    --color-primary: #3A86B4;
+    /* Brand */
+    --brand-green-100:#25CF60; /* sucesso/estável */
+    --brand-green-200:#1BB952; /* primário */
+    --brand-green-300:#0F9E41; /* hover primário */
+    --brand-gray-10:#F5F5F5;   /* fundo leve */
+    --brand-gray-20:#E3E3E3;   /* bordas/divisores */
+    --brand-gray-600:#666666;  /* texto padrão */
+    --brand-blue-500:#004C99;  /* institucional */
+    --brand-red-600:#DC2626;   /* alerta */
+    --radius:10px;
+
+    /* Compat antiga */
+    --color-primary: var(--brand-green-200);
     --color-secondary: #4CC9A6;
-    --color-neutral-light: #F5F7FA;
+    --color-neutral-light: var(--brand-gray-10);
     --color-neutral-medium: #B0B8C1;
-    --color-text: #1E2A3B;
-    --color-error: #E57373;
+    --color-text: var(--brand-gray-600);
+    --color-error: var(--brand-red-600);
     --color-warning: #FFD166;
-    --color-success: #06D6A0;
+    --color-success: var(--brand-green-100);
   }
 
   /* Body */
@@ -21,7 +34,7 @@
     background-color: var(--color-neutral-light);
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   }
 
   /* Tabs de Navegação */
@@ -59,12 +72,12 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 
-  /* Botão Primário */
+  /* Botão Primário (verde) */
   .btn-primary {
-    background-color: var(--color-primary);
+    background-color: var(--brand-green-200);
     color: white;
     padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     transition: background-color 0.2s ease;
     border: none;
     cursor: pointer;
@@ -75,12 +88,23 @@
   }
   
   .btn-primary:hover {
-    background-color: #2e6d90;
+    background-color: var(--brand-green-300);
   }
   
   .btn-primary:active {
-    background-color: #25526e;
+    background-color: var(--brand-green-300);
   }
+
+  /* Botão Secundário */
+  .btn-secondary{
+    background:#fff;
+    border:1px solid var(--brand-gray-20);
+    color:var(--brand-gray-600);
+    padding:0.5rem 1rem;
+    border-radius: calc(var(--radius) - 2px);
+    font-size:0.875rem;
+  }
+  .btn-secondary:hover{ background: var(--brand-gray-10); }
 
   /* Inputs de Formulário */
   .form-input {
@@ -94,9 +118,21 @@
   
   .form-input:focus {
     outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(58, 134, 180, 0.15);
+    border-color: var(--brand-green-200);
+    box-shadow: 0 0 0 3px rgba(27, 185, 82, 0.18);
   }
+
+  /* Utilitários de marca */
+  .text-brand-blue-500{ color: var(--brand-blue-500) }
+  .text-brand-gray-600{ color: var(--brand-gray-600) }
+  .bg-brand-gray-10{ background: var(--brand-gray-10) }
+  .bg-brand-gray-20{ background: var(--brand-gray-20) }
+  .border-brand-gray-20{ border-color: var(--brand-gray-20) }
+  .rounded-lg{ border-radius: var(--radius) }
+  .rounded-md{ border-radius: calc(var(--radius) - 2px) }
+  .ring-brand-green-200:focus{ outline:2px solid var(--brand-green-200); outline-offset:2px }
+  .badge{ border-radius:9999px; font-weight:600; font-size:.75rem; padding:.25rem .75rem }
+  .badge--stable{ background: var(--brand-green-100); color:#fff }
 
   /* Animações */
   .animate-slide-in {
@@ -172,24 +208,5 @@
     }
   }
 
-    <!-- Navbar -->
-  <nav class="bg-blue-600 text-white shadow-lg">
-    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-      <div class="flex items-center space-x-3">
-        <i class="fas fa-heartbeat text-2xl"></i>
-        <h1 class="text-xl font-bold">Fisio System</h1>
-      </div>
-      <div class="flex items-center space-x-4">
-        <button onclick="showProfessionalModal()" class="btn-primary text-xs px-3 py-1" title="Cadastrar novo profissional">
-          <i class="fas fa-user-plus mr-1"></i> Cadastrar Profissional
-        </button>
-        <span id="user-name" class="text-sm"></span>
-        <span id="user-role" class="text-xs bg-blue-700 px-2 py-1 rounded"></span>
-        <button onclick="toggleDebug()" class="text-xs opacity-30 hover:opacity-100 transition-opacity" title="Ativar/Desativar Debug">
-          <i class="fas fa-bug"></i>
-        </button>
-      </div>
-    </div>
-  </nav>
-  
+  /* (Removido HTML indevido dentro do CSS) */
 </style>

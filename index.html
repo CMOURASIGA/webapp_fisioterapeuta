@@ -22,13 +22,29 @@
         <h1 class="text-xl font-bold">Fisio System</h1>
       </div>
       <div class="flex items-center space-x-4">
+        <button id="btn-open-sidebar" class="btn-secondary lg:hidden">Menu</button>
         <span id="user-name" class="text-sm"></span>
         <span id="user-role" class="text-xs bg-blue-700 px-2 py-1 rounded"></span>
       </div>
     </div>
   </nav>
 
+  <!-- Sidebar + Overlay -->
+  <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-40" onclick="closeSidebarMobile()"></div>
+  <aside id="sidebar" class="fixed inset-y-0 left-0 w-72 bg-white border-r border-brand-gray-20 hidden lg:block z-50">
+    <div class="px-4 py-4 border-b border-brand-gray-20">
+      <h1 class="text-lg font-semibold text-brand-blue-500">Fisio System</h1>
+    </div>
+    <nav class="p-4 space-y-1" aria-label="Navegação principal">
+      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/dashboard"><i class="fas fa-home mr-2"></i>Dashboard</button>
+      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/pacientes"><i class="fas fa-users mr-2"></i>Pacientes</button>
+      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/atendimentos"><i class="fas fa-clipboard-list mr-2"></i>Atendimentos</button>
+      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/relatorios"><i class="fas fa-chart-line mr-2"></i>Relatórios</button>
+    </nav>
+  </aside>
+
   <!-- Container Principal -->
+  <div class="lg:pl-72">
   <div class="container mx-auto px-4 py-6">
     <!-- Tabs -->
     <div class="bg-white rounded-lg shadow mb-6">
@@ -275,6 +291,23 @@
       </div>
     </div>
   </div>
+  </div>
+
+  <!-- Drawer Base -->
+  <section id="drawer" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black bg-opacity-40" onclick="closeDrawer()"></div>
+    <div class="absolute right-0 top-0 h-full w-full sm:max-w-xl bg-white border-l border-brand-gray-20 shadow-xl flex flex-col">
+      <header class="px-4 py-3 border-b border-brand-gray-20 flex justify-between items-center">
+        <h3 id="drawer-title" class="text-lg font-semibold text-brand-blue-500">Título</h3>
+        <button class="btn-secondary" onclick="closeDrawer()">Fechar</button>
+      </header>
+      <div id="drawer-body" class="p-4 overflow-auto"></div>
+      <footer class="p-4 border-t border-brand-gray-20 flex justify-end gap-2">
+        <button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>
+        <button id="drawer-primary" class="btn-primary">Confirmar</button>
+      </footer>
+    </div>
+  </section>
 
   <!-- Loading Overlay -->
   <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
