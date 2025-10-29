@@ -137,11 +137,12 @@
   .ring-brand-green-200:focus{ outline:2px solid var(--brand-green-200); outline-offset:2px }
   .badge{ border-radius:9999px; font-weight:600; font-size:.75rem; padding:.25rem .75rem }
   .badge--stable{ background: var(--brand-green-100); color:#fff }
-  /* Sidebar (dark blue) */
-  .sidebar{ background: var(--brand-emerald); color:#fff }
-  .nav-item{ color:#fff; opacity:.9; display:flex; align-items:center; gap:.5rem; width:100%; padding:.5rem .75rem; border-radius:8px; }
-  .nav-item:hover{ background: rgba(255,255,255,0.08) }
-  .nav-item.is-active{ background: rgba(255,255,255,0.12); font-weight:600; }
+  /* Rail lateral (claro) */
+  .sidebar{ background: var(--brand-gray-10); color: var(--brand-gray-600); border-right:1px solid var(--brand-gray-20); }
+  .rail-brand{ background: var(--brand-emerald); color:#fff; padding:.5rem .75rem; border-radius:12px; display:inline-flex; align-items:center; gap:.5rem; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+  .nav-item{ color: var(--brand-gray-600); display:flex; align-items:center; gap:.5rem; width:100%; padding:.5rem .75rem; border-radius:8px; }
+  .nav-item:hover{ background: rgba(27,185,82,0.06) }
+  .nav-item.is-active{ background: rgba(27,185,82,0.1); font-weight:600; border-left:3px solid var(--brand-emerald); }
 
   /* Animações */
   .animate-slide-in {

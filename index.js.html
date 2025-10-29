@@ -2128,13 +2128,7 @@ function calculateAge(birthDate) {
 
 function escapeHtml(text) {
   if (!text && text !== 0) return '';
-  var map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
+  var map = {\n    '#/dashboard': 'dashboard',\n    '#/pacientes': 'patients',\n    '#/atendimentos': 'encounters',\n    '#/relatorios': 'reports'\n  };
   return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
@@ -2832,6 +2826,7 @@ function closeDrawer(){
   if (el) el.classList.add('hidden');
 }
 </script>
+
 
 
 
