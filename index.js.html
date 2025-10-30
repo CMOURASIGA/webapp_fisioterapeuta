@@ -948,6 +948,17 @@ function handleAgendaSubmit(e) {
       showError('A data de fim deve ser posterior à data de início');
       return;
     }
+    
+    // Converte para ISO mantendo o horário local (não UTC)
+    // O backend vai interpretar como horário de Brasília
+    var startISO = convertToLocalISO(startDate);
+    var endISO = convertToLocalISO(endDate);
+    
+    console.log('[handleAgendaSubmit] Start original:', start);
+    console.log('[handleAgendaSubmit] Start ISO:', startISO);
+    console.log('[handleAgendaSubmit] End original:', end);
+    console.log('[handleAgendaSubmit] End ISO:', endISO);
+    
   } catch (error) {
     showError('Datas inválidas');
     return;
@@ -958,9 +969,11 @@ function handleAgendaSubmit(e) {
   var data = {
     patient_id: patientId,
     title: title || 'Sessão de fisioterapia',
-    start: new Date(start).toISOString(),
-    end: new Date(end).toISOString()
+    start: startISO,
+    end: endISO
   };
+  
+  console.log('[handleAgendaSubmit] Enviando:', JSON.stringify(data));
   
   google.script.run
     .withSuccessHandler(function(resp) {
@@ -981,9 +994,22 @@ function handleAgendaSubmit(e) {
     .handleApiPost('/api/agenda', data);
 }
 
+/**
+ * Converte datetime-local para ISO mantendo horário local
+ * Ex: "2025-10-31T08:00" -> "2025-10-31T08:00:00"
+ */
+function convertToLocalISO(date) {
+  var year = date.getFullYear();
+  var month = String(date.getMonth() + 1).padStart(2, '0');
+  var day = String(date.getDate()).padStart(2, '0');
+  var hours = String(date.getHours()).padStart(2, '0');
+  var minutes = String(date.getMinutes()).padStart(2, '0');
+  var seconds = '00';
+  
+  return year + '-' + month + '-' + day + 'T' + hours + ':' + minutes + ':' + seconds;
+}
+
 </script>
-
-
 
 
 <script>
