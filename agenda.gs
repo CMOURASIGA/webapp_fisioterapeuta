@@ -38,7 +38,15 @@ function getAgenda(params) {
   return { success: true, data: filtered };
 }
 
-function createAgendaEntry(body) {
+function parseLocalISO(iso){
+  try{
+    if(!iso) return null;
+    var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if(m){ return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), Number(m[4]), Number(m[5]), 0, 0); }
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }catch(e){ return null; }
+}function createAgendaEntry(body) {
   requireRole(['FISIO', 'COORD', 'ADMIN']);
   ensureAgendaSheet();
   if(!body || !body.patient_id || !body.start || !body.end){
@@ -60,7 +68,7 @@ function createAgendaEntry(body) {
   try {
     var cal = CalendarApp.getDefaultCalendar();
     var patient = getById('Patients', entry.patient_id) || {};
-    var ev = cal.createEvent(entry.title, new Date(entry.start), new Date(entry.end), {
+    var ev = cal.createEvent(entry.title, parseLocalISO(entry.start), parseLocalISO(entry.end), {
       description: 'Paciente: ' + (patient.full_name || entry.patient_id)
     });
     entry.calendar_event_id = ev.getId();
@@ -72,6 +80,7 @@ function createAgendaEntry(body) {
   logAudit('CREATE', 'Agenda', entry.id, { patient_id: entry.patient_id });
   return { success: true, data: entry };
 }
+
 
 
 

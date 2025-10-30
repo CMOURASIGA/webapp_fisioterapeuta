@@ -490,7 +490,7 @@ function handleAgendaSubmit(e){ e.preventDefault(); var pid=document.getElementB
   google.script.run
     .withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.success){ showSuccess('Agendamento salvo'); closeAgendaModal(); fetchAgendaAndRender(); } else { showError('Falha ao salvar agendamento'); } })
     .withFailureHandler(function(err){ hideLoading(); showError('Erro ao salvar agendamento: '+(err&&err.message||err||'')); })
-    .handleApiPost('/api/agenda', { patient_id: pid, title: title, start: start, end: end });
+    .(function(){ try{ var sIso=new Date(start).toISOString(); var eIso=new Date(end).toISOString(); google.script.run.withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.success){ showSuccess('Agendamento salvo'); closeAgendaModal(); fetchAgendaAndRender(); } else { showError('Falha ao salvar agendamento: '+((resp&&resp.error)||'Sem detalhes')); } }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao salvar agendamento: '+(err&&err.message||err||'')); }).handleApiPost('/api/agenda', { patient_id: pid, title: title, start: sIso, end: eIso }); } catch(ex){ hideLoading(); showError('Data/hora inválida: '+(ex&&ex.message||ex)); } })();
 }
 </script>
 
@@ -546,5 +546,6 @@ function renderAppointmentModalImproved(slotISO){
   if(startEl && endEl){ startEl.addEventListener('change', function(){ try{ var s=new Date(startEl.value); var e=new Date(s.getTime()+60*60000); endEl.value = (function(d){ var p=function(n){return ('0'+n).slice(-2)}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); })(e); endEl.min = startEl.value; }catch(_){} }); }
 }
 </script>
+
 
 
