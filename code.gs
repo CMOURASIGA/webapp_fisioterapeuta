@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * SISTEMA DE FISIOTERAPIA - GOOGLE APPS SCRIPT
  * Code.gs - Arquivo Principal (COM LOGIN)
@@ -144,4 +144,5 @@ function jsonResponse(obj, status) {
   output.setMimeType(ContentService.MimeType.JSON);
   return output;
 }
+
 

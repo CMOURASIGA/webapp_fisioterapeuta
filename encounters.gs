@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * encounters.gs - Gerenciamento de Atendimentos
  * VERSÃO ATUALIZADA - Profissional selecionado manualmente

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * storage.gs - Gerenciamento de Arquivos no Drive
  * ============================================================================
@@ -68,3 +68,4 @@ function listPatientFiles(patientId) {
   requireRole(['FISIO', 'COORD', 'ADMIN']);
   return listRecords('Attachments', { patient_id: patientId });
 }
+

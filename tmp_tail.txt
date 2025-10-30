@@ -1,0 +1,52 @@
+<script>
+// =============================================================================
+// Navegação lateral (router por hash) + Drawer base
+// =============================================================================
+
+(function initShell() {
+  document.addEventListener('DOMContentLoaded', function() {
+    // Sidebar links → navegação por hash
+    var items = document.querySelectorAll('#sidebar [data-route]');
+    for (var i=0;i<items.length;i++){\n    var it = items[i];\n    if (it.getAttribute('data-route') === hash) { it.classList.add('is-active'); } else { it.classList.remove('is-active'); }\n  }\n  // Atualiza título
+  var title = document.getElementById('page-title');
+  if (title){
+    var titles = {dashboard:'Dashboard',patients:'Pacientes',encounters:'Atendimentos',reports:'Relatórios'};
+    title.textContent = titles[tab] || 'Fisio System';
+  }
+}
+
+function openSidebarMobile(){
+  var overlay = document.getElementById('sidebar-overlay');
+  var aside = document.getElementById('sidebar');
+  if (overlay) overlay.classList.remove('hidden');
+  if (aside) aside.classList.remove('hidden');
+}
+function closeSidebarMobile(){
+  var overlay = document.getElementById('sidebar-overlay');
+  var aside = document.getElementById('sidebar');
+  if (overlay) overlay.classList.add('hidden');
+  if (aside && window.innerWidth < 1024) aside.classList.add('hidden');
+}
+
+// Drawer base reutilizável
+function openDrawer(opts){
+  var el = document.getElementById('drawer');
+  if (!el) return;
+  document.getElementById('drawer-title').textContent = (opts && opts.title) || '';
+  document.getElementById('drawer-body').innerHTML = (opts && opts.bodyHtml) || '';
+  var primary = document.getElementById('drawer-primary');
+  if (primary){
+    primary.onclick = function(){ if (opts && typeof opts.onPrimary === 'function') opts.onPrimary(); };
+    primary.textContent = (opts && opts.primaryText) || 'Confirmar';
+  }
+  el.classList.remove('hidden');
+}
+function closeDrawer(){
+  var el = document.getElementById('drawer');
+  if (el) el.classList.add('hidden');
+}
+</script>
+
+
+
+

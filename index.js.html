@@ -1,2832 +1,550 @@
-<script>
-/**
- * ============================================================================
- * SISTEMA FISIOTERAPIA - FRONTEND FINAL MERGE
- * Fonte base: versão corrigida (nova)
- * Itens preservados/injetados: modais de detalhes, cache, fallback, modal profissional inline
- * ============================================================================
- */
+﻿<script>
+// =============================================================================
+// Fisio System – Frontend (UTF-8, estruturado e estável)
+// =============================================================================
 
-// Variáveis globais
+// Estado global
 var currentUser = null;
 var currentPatient = null;
 var currentEncounter = null;
 var INITIAL_PATIENTS = [];
-var currentFilteredPatient = null; // [MERGE] mantido do antigo
-if (!window.ENCOUNTERS_CACHE_BY_ID) {
-  window.ENCOUNTERS_CACHE_BY_ID = {}; // [MERGE] cache local de atendimentos p/ fallback offline
-}
+if (!window.ENCOUNTERS_CACHE_BY_ID) window.ENCOUNTERS_CACHE_BY_ID = {};
 
-// ============================================================================
-// INICIALIZAÇÃO
-// ============================================================================
-
+// =============================================================================
+// Boot
+// =============================================================================
 document.addEventListener('DOMContentLoaded', function() {
   console.log('✅ Sistema iniciado');
-  
   if (typeof google === 'undefined' || !google.script || !google.script.run) {
-    console.error('❌ google.script.run não disponível');
     showError('Sistema não inicializado. Acesse via URL do Web App.');
     return;
   }
-  
-  console.log('✅ google.script.run disponível');
   loadUser();
-  
-  // tenta carregar pacientes injetados no HTML pelo backend
-  try {
-    if (typeof PATIENTS_DATA !== 'undefined' && PATIENTS_DATA) {
-      debugLog('✅ Pacientes carregados do servidor', PATIENTS_DATA);
-      INITIAL_PATIENTS = PATIENTS_DATA;
-      updateDashboardStats(PATIENTS_DATA.length);
-    }
-  } catch (e) {
-    debugLog('⚠️ Erro ao carregar pacientes do servidor:', e);
+  try { if (typeof PATIENTS_DATA !== 'undefined' && PATIENTS_DATA) { INITIAL_PATIENTS = PATIENTS_DATA; updateDashboardStats(PATIENTS_DATA.length); } } catch (e) {}
+
+  var items = document.querySelectorAll('#sidebar [data-route]');
+  for (var i = 0; i < items.length; i++) {
+    items[i].addEventListener('click', function(e){
+      e.preventDefault();
+      var route = this.getAttribute('data-route');
+      if (!route) return;
+      var navItems = document.querySelectorAll('#sidebar .nav-item');
+      for (var j=0;j<navItems.length;j++) navItems[j].classList.remove('is-active');
+      this.classList.add('is-active');
+      showTab(route);
+      if (window.innerWidth <= 1024) {
+        var s = document.getElementById('sidebar');
+        var o = document.getElementById('sidebar-overlay');
+        if (s) s.classList.remove('open');
+        if (o) o.classList.add('hidden');
+      }
+    });
   }
+  showTab('dashboard');
 });
 
-// ============================================================================
-// FUNÇÕES DE DEBUG
-// ============================================================================
+function toggleSidebar(){ var s=document.getElementById('sidebar'); var o=document.getElementById('sidebar-overlay'); if (s) s.classList.toggle('open'); if (o) o.classList.toggle('hidden'); }
 
-function debugLog(message, data) {
-  console.log(message, data);
-  
-  var debugDiv = document.getElementById('debug-output');
-  if (!debugDiv) {
-    debugDiv = document.createElement('div');
-    debugDiv.id = 'debug-output';
-    debugDiv.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:30vh;overflow:auto;background:#0b1215;color:#9fe29f;font:12px/1.4 monospace;padding:8px;z-index:50;border-top:1px solid #0f0;display:none;';
-    document.body.appendChild(debugDiv);
-  }
-  
-  var timestamp = new Date().toLocaleTimeString();
-  var dataStr = '';
-  if (data !== undefined) {
-    try {
-      dataStr = ' | ' + JSON.stringify(data, null, 2);
-    } catch (e) {
-      dataStr = ' | [Erro ao serializar]';
+// =============================================================================
+// Utils
+// =============================================================================
+function debugLog(msg, data){ try{ console.log(msg, data); }catch(e){} }
+function escapeHtml(text){ if (!text && text !== 0) return ''; var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }; return String(text).replace(/[&<>\"']/g, function(m){ return map[m] || m; }); }
+function showLoading(){ var el=document.getElementById('loading'); if(el) el.classList.remove('hidden'); }
+function hideLoading(){ var el=document.getElementById('loading'); if(el) el.classList.add('hidden'); }
+function showSuccess(m){ console.log('[SUCCESS]', m); }
+function showError(m){ console.error('[ERROR]', m); }
+function calculateAge(b){ if(!b) return '-'; try{var t=new Date(),d=new Date(b),a=t.getFullYear()-d.getFullYear(),m=t.getMonth()-d.getMonth(); if(m<0||(m===0&&t.getDate()<d.getDate())) a--; return isNaN(a)?'-':a;}catch(e){return '-';} }
+function formatCPF(c){ if(!c) return ''; var n=String(c).replace(/\D/g,''); return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'); }
+function formatDateTime(iso){ if(!iso) return '-'; try{ var d=new Date(iso); var dd=('0'+d.getDate()).slice(-2), mm=('0'+(d.getMonth()+1)).slice(-2), yy=d.getFullYear(), hh=('0'+d.getHours()).slice(-2), mi=('0'+d.getMinutes()).slice(-2); return dd+'/'+mm+'/'+yy+' '+hh+':'+mi; }catch(e){ return '-'; } }
+function formatDateBR(iso){ if(!iso) return '__/__/____'; try{ var d=new Date(iso); var dd=('0'+d.getDate()).slice(-2), mm=('0'+(d.getMonth()+1)).slice(-2), yy=d.getFullYear(); return dd+'/'+mm+'/'+yy; }catch(e){ return '__/__/____'; } }
+function getInitials(name){ if(!name) return '??'; var p=String(name).trim().split(/\s+/); return ((p[0]||'').charAt(0)+(p.length>1?(p[p.length-1]||'').charAt(0):'')).toUpperCase()||'??'; }
+
+// =============================================================================
+// Usuário
+// =============================================================================
+function loadUser(){ showLoading(); google.script.run.withSuccessHandler(function(user){ hideLoading(); if(!user||!user.role){ showError('Acesso negado.'); return; } currentUser=user; var n=document.getElementById('user-name'); if(n) n.textContent=user.email||''; var r=document.getElementById('user-role'); if(r) r.textContent=user.role||''; }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao carregar usuário: '+(err.message||err)); }).handleApiGet({path:'/api/user'}); }
+
+// =============================================================================
+// Dashboard
+// =============================================================================
+function updateDashboardStats(count){ var s=document.getElementById('stat-patients'); if(s) s.textContent=count; var b=document.getElementById('badge-pacientes'); if(b){ b.textContent=count||0; b.style.display='inline-block'; } }
+function loadDashboardStats(){ updateDashboardStats(INITIAL_PATIENTS.length); }
+
+// =============================================================================
+// Header + Abas
+// =============================================================================
+function updatePageHeader(tab){ var t=document.getElementById('page-title'), s=document.getElementById('page-subtitle'), a=document.getElementById('page-actions'); var cfg={ dashboard:{title:'Dashboard', subtitle:'Visão geral do sistema de fisioterapia', actions:'<button class=\"btn-primary\" onclick=\"showProfessionalModalFromDashboard()\"><i class=\"fas fa-user-md mr-2\"></i> Cadastrar Profissional</button>'}, patients:{title:'Pacientes', subtitle:'Gerenciamento de pacientes cadastrados', actions:'<button class=\"btn-primary\" onclick=\"showNewPatientModal()\"><i class=\"fas fa-plus mr-2\"></i> Novo Paciente</button>'}, encounters:{title:'Atendimentos', subtitle:'Registro e acompanhamento de atendimentos', actions:''}, reports:{title:'Relatórios', subtitle:'Geração de documentos e Relatórios', actions:''}, agenda:{title:'Agenda', subtitle:'Planejamento semanal e atendimentos', actions:''}, professionals:{title:'Profissionais', subtitle:'Cadastro e gerenciamento da equipe', actions:'<button class=\"btn-primary\" onclick=\"showProfessionalModalFromDashboard()\"><i class=\"fas fa-plus mr-2\"></i> Novo Profissional</button>'} }[tab]||{title:'Fisio System',subtitle:'',actions:''}; if(t) t.textContent=cfg.title; if(s) s.textContent=cfg.subtitle; if(a) a.innerHTML=cfg.actions; }
+function showTab(tab){ var tabs=document.querySelectorAll('.tab-content'); for(var i=0;i<tabs.length;i++) tabs[i].classList.add('hidden'); var el=document.getElementById(tab+'-tab'); if(el) el.classList.remove('hidden'); updatePageHeader(tab); if(tab==='dashboard') loadDashboardStats(); else if(tab==='patients') loadPatients(); else if(tab==='encounters') loadEncountersTab(); else if(tab==='reports') loadPatientsForReport(); else if(tab==='professionals') loadProfessionalsTab(); else if(tab==='agenda') loadAgendaTab(); }
+
+// =============================================================================
+// Pacientes (lista / busca / CRUD / status) – resumo
+// =============================================================================
+function loadPatients(){ if(INITIAL_PATIENTS.length>0){ renderPatientsList(INITIAL_PATIENTS); return; } showLoading(); google.script.run.withSuccessHandler(function(p){ hideLoading(); INITIAL_PATIENTS=Array.isArray(p)?p:[]; renderPatientsList(INITIAL_PATIENTS); updateDashboardStats(INITIAL_PATIENTS.length); }).withFailureHandler(function(e){ hideLoading(); showError('Erro ao carregar pacientes: '+(e.message||e)); renderPatientsList([]); }).getFrontendPatients(); }
+function renderPatientsList(list){ var c=document.getElementById('patients-list'); if(!c) return; if(!Array.isArray(list)||list.length===0){ c.innerHTML='<div class=\"empty-state\"><i class=\"fas fa-user-friends\"></i><h3>Nenhum paciente cadastrado</h3><p>Clique em "Novo Paciente" para cadastrar o primeiro</p></div>'; return; } var html=''; for(var i=0;i<list.length;i++){ var p=list[i], age=calculateAge(p.birth_date), initials=getInitials(p.full_name), sexIcon=p.sex==='M'?'mars':'venus', sexTxt=p.sex==='M'?'Masculino':'Feminino', status=(p.status==='ACTIVE'||!p.status)?'active':'inactive'; html+='<div class=\"patient-card\" onclick=\"viewPatient(\''+p.id+'\')\"><div class=\"patient-status-badge '+status+'\">'+(p.status==='ACTIVE'?'Ativo':'Inativo')+'</div><div class=\"patient-card-header\"><div class=\"patient-avatar\">'+escapeHtml(initials)+'</div><div class=\"patient-info\"><div class=\"patient-name\">'+escapeHtml(p.full_name||'')+'</div><div class=\"patient-meta\"><span class=\"patient-meta-item\"><i class=\"fas fa-'+sexIcon+'\"></i><span>'+sexTxt+'</span></span><span class=\"patient-meta-item\"><i class=\"fas fa-birthday-cake\"></i><span>'+age+' anos</span></span></div></div></div><div class=\"patient-card-body\"><div class=\"patient-detail-row\"><i class=\"fas fa-id-card\"></i><span>CPF: '+formatCPF(p.document_id||'')+'</span></div></div><div class=\"patient-card-footer\"><button onclick=\"event.stopPropagation(); startEncounter(\''+p.id+'\')\" class=\"btn-card-action primary\"><i class=\"fas fa-play\"></i><span>Atender</span></button><button onclick=\"event.stopPropagation(); editPatient(\''+p.id+'\')\" class=\"btn-card-action\"><i class=\"fas fa-edit\"></i><span>Editar</span></button><button onclick=\"event.stopPropagation(); changePatientStatus(\''+p.id+'\')\" class=\"btn-card-action\"><i class=\"fas fa-exchange-alt\"></i></button></div></div>'; } c.innerHTML=html; }
+function searchPatients(){ var q=(document.getElementById('patient-search')?.value||'').toLowerCase(); if(q.length<2){ renderPatientsList(INITIAL_PATIENTS); return; } renderPatientsList(INITIAL_PATIENTS.filter(function(p){ return (p.full_name||'').toLowerCase().indexOf(q)!==-1 || String(p.document_id||'').indexOf(q)!==-1; })); }
+// Substituído por implementação completa ao final do arquivo (overrides)
+
+// =============================================================================
+// Profissionais
+// =============================================================================
+function loadProfessionalsForEncounter(){ var sel=document.getElementById('encounter-professional'); if(!sel) return; sel.innerHTML='<option value=\"\">Carregando profissionais...</option>'; google.script.run.withSuccessHandler(function(resp){ var list=(resp&&resp.data)||[]; if(!list.length){ sel.innerHTML='<option value=\"\">Nenhum profissional encontrado</option>'; return; } var html='<option value=\"\">Selecione o profissional...</option>'; list.forEach(function(p){ var label=(p.full_name||p.email||p.id||''); var cref=p.crefito?(' - CREFITO: '+p.crefito):''; html+='<option value=\"'+p.id+'\">'+escapeHtml(label)+cref+'</option>'; }); sel.innerHTML=html; }).withFailureHandler(function(err){ sel.innerHTML='<option value=\"\">Erro ao carregar</option>'; showError('Erro ao carregar profissionais: '+(err.message||err)); }).handleApiGet({path:'/api/professionals'}); }
+function loadProfessionalsTab(){ var c=document.getElementById('professionals-list'); if(!c) return; c.innerHTML='<p class=\"text-gray-500 text-center py-8\">Carregando profissionais...</p>'; google.script.run.withSuccessHandler(function(resp){ var list=(resp&&resp.data)||[]; if(!list.length){ c.innerHTML='<div class=\"text-center py-12 text-gray-400\"><i class=\"fas fa-user-md text-6xl mb-4\"></i><p class=\"text-lg\">Nenhum profissional cadastrado</p></div>'; return; } var h='<div class=\"space-y-3\">'; list.forEach(function(p){ h+='<div class=\"flex justify-between items-center bg-white border rounded p-3\"><div class=\"text-gray-800 font-medium\">'+escapeHtml(p.full_name||p.email||p.id||'')+'</div><div class=\"text-xs text-gray-500\">'+escapeHtml(p.role||'')+'</div></div>'; }); h+='</div>'; c.innerHTML=h; }).withFailureHandler(function(){ c.innerHTML='<p class=\"text-red-500 text-center py-8\">Erro ao carregar profissionais</p>'; }).handleApiGet({path:'/api/professionals'}); }
+
+// =============================================================================
+// Atendimentos – fluxo e listagem
+// =============================================================================
+function startEncounter(patientId){ var p=INITIAL_PATIENTS.find(function(x){return x.id===patientId;}); if(!p){ showError('Paciente não encontrado'); return; } currentPatient=p; showEncounterModal(); }
+function showEncounterModal(){ showError('Fluxo de atendimento resumido nesta versão.'); }
+function loadEncountersTab(){ var sel=document.getElementById('encounter-patient-filter'); if(!sel) return; if(INITIAL_PATIENTS.length===0){ google.script.run.withSuccessHandler(function(p){ INITIAL_PATIENTS=p||[]; populatePatientSelect(); }).withFailureHandler(function(){ sel.innerHTML='<option value=\"\">Erro ao carregar pacientes</option>'; }).getFrontendPatients(); return; } populatePatientSelect(); }
+function populatePatientSelect(){ var sel=document.getElementById('encounter-patient-filter'); if(!sel) return; var h='<option value=\"\">Selecione um paciente...</option>'; INITIAL_PATIENTS.forEach(function(p){ h+='<option value=\"'+p.id+'\">'+escapeHtml(p.full_name)+' - '+calculateAge(p.birth_date)+' anos - CPF: '+escapeHtml(p.document_id||'')+'</option>'; }); sel.innerHTML=h; }
+function loadPatientEncounters(){
+  var id=(document.getElementById('encounter-patient-filter')||{}).value||'';
+  var list=document.getElementById('encounters-list');
+  if(!id){ if(list) list.innerHTML='<div class="text-center py-12 text-gray-400"><i class="fas fa-filter text-6xl mb-4"></i><p class="text-lg">Nenhum paciente selecionado</p></div>'; return; }
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(resp){
+      hideLoading();
+      var encs=(resp&&resp.data)||[];
+      if(!encs.length){ list.innerHTML='<div class="text-center py-12 text-gray-400"><i class="fas fa-clipboard text-6xl mb-4"></i><p class="text-lg">Nenhum atendimento encontrado</p></div>'; return; }
+      var h='<div class="space-y-4">';
+      encs.forEach(function(enc){
+        try{ window.ENCOUNTERS_CACHE_BY_ID[enc.id]=enc; }catch(e){}
+        var badge=enc.status==='OPEN'?'<span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Em Andamento</span>':'<span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Finalizado</span>';
+        h+=
+          '<div class="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">'+
+            '<div class="flex justify-between items-start mb-3">'+
+              '<div>'+ 
+                '<h3 class="font-bold text-lg text-gray-800"><i class="fas fa-stethoscope text-blue-600 mr-2"></i>'+escapeHtml(enc.type||'')+'</h3>'+ 
+                '<p class="text-sm text-gray-600"><i class="fas fa-user-md mr-1"></i>'+escapeHtml(enc.professional_name||'')+'</p>'+ 
+              '</div>'+ 
+              badge+
+            '</div>'+ 
+            '<div class="grid grid-cols-2 gap-3 text-sm mb-3">'+
+              '<div><span class="text-gray-500">Início:</span><span class="font-medium ml-1">'+formatDateTime(enc.started_at)+'</span></div>'+ 
+              '<div><span class="text-gray-500">Fim:</span><span class="font-medium ml-1">'+(enc.ended_at?formatDateTime(enc.ended_at):'-')+'</span></div>'+ 
+              '<div><span class="text-gray-500">Local:</span><span class="font-medium ml-1">'+escapeHtml(enc.location||'')+'</span></div>'+ 
+            '</div>'+ 
+            '<div class="flex gap-2 pt-3 border-t">'+
+              '<button onclick="viewEncounterDetails(\''+enc.id+'\')" class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200"><i class="fas fa-eye mr-1"></i>Ver Detalhes</button>'+ 
+              '<button onclick="editEncounter(\''+enc.id+'\')" class="text-sm bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200"><i class="fas fa-edit mr-1"></i>Editar</button>'+ 
+            '</div>'+ 
+          '</div>';
+      });
+      h+='</div>';
+      list.innerHTML=h;
+    })
+    .withFailureHandler(function(err){ hideLoading(); showError('Erro ao buscar atendimentos: '+(err.message||err)); })
+    .handleApiGet({path:'/api/encounters/patient', patient_id:id});
+}
+
+// Edição simples de atendimento: permite anexar nova nota SOAP e novos sinais
+function editEncounter(encounterId){
+  // Carrega detalhes (para contexto) e abre modal de edição simples
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(details){
+      hideLoading();
+      openEditEncounterModal(encounterId, details||{});
+    })
+    .withFailureHandler(function(){ hideLoading(); openEditEncounterModal(encounterId, {}); })
+    .getEncounterDetails(encounterId);
+}
+
+function openEditEncounterModal(encounterId, details){
+  var html = ''+
+    '<div id="edit-encounter-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">'+
+      '<div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">'+
+        '<div class="bg-blue-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center">'+
+          '<h3 class="text-lg font-bold"><i class="fas fa-clipboard-list mr-2"></i>Editar Atendimento</h3>'+
+          '<button onclick="closeEditEncounterModal()" class="text-white hover:text-gray-200"><i class="fas fa-times"></i></button>'+
+        '</div>'+ 
+        '<form id="edit-encounter-form" class="p-6 space-y-4">'+
+          '<div class="grid grid-cols-2 gap-4">'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">SpO₂ (%)</label><input type="number" id="edit-spo2" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="95-100"></div>'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">FC (bpm)</label><input type="number" id="edit-hr" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="60-100"></div>'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">FR (ipm)</label><input type="number" id="edit-rr" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="12-20"></div>'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">PA Sistólica</label><input type="number" id="edit-bps" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="120"></div>'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">PA Diastólica</label><input type="number" id="edit-bpd" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="80"></div>'+
+            '<div><label class="block text-sm font-medium text-gray-700 mb-1">Temp (°C)</label><input type="number" id="edit-temp" step="0.1" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="36.5"></div>'+
+          '</div>'+
+          '<div class="space-y-2">'+
+            '<label class="block text-sm font-medium text-gray-700 mb-1">Adicionar nota SOAP (opcional)</label>'+
+            '<textarea id="edit-soap" rows="3" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="Observações adicionais..."></textarea>'+
+          '</div>'+
+          '<div class="flex justify-end gap-2 pt-4 border-t">'+
+            '<button type="button" onclick="closeEditEncounterModal()" class="px-4 py-2 border rounded">Cancelar</button>'+
+            '<button type="submit" class="btn-primary px-6 py-2"><i class="fas fa-save mr-2"></i>Salvar alterações</button>'+
+          '</div>'+
+        '</form>'+ 
+      '</div>'+ 
+    '</div>';
+  var w=document.createElement('div'); w.id='edit-encounter-wrapper'; w.innerHTML=html; document.body.appendChild(w);
+  var f=document.getElementById('edit-encounter-form');
+  if(f){ f.addEventListener('submit', function(e){ e.preventDefault(); submitEditEncounter(encounterId); }); }
+}
+
+function closeEditEncounterModal(){ var w=document.getElementById('edit-encounter-wrapper'); if(w) w.remove(); }
+
+function submitEditEncounter(encounterId){
+  // Registra vitais se houver
+  var spo2=document.getElementById('edit-spo2').value,
+      hr=document.getElementById('edit-hr').value,
+      rr=document.getElementById('edit-rr').value,
+      bps=document.getElementById('edit-bps').value,
+      bpd=document.getElementById('edit-bpd').value,
+      temp=document.getElementById('edit-temp').value,
+      soap=document.getElementById('edit-soap').value.trim();
+
+  var doVitals = (spo2||hr||rr||bps||bpd||temp);
+  var doNote = !!soap;
+  showLoading();
+
+  function finish(){ hideLoading(); showSuccess('Atendimento atualizado'); closeEditEncounterModal(); loadPatientEncounters(); }
+  function fail(err){ hideLoading(); showError('Erro ao atualizar atendimento: '+((err&&err.message)||err||'')); }
+
+  // Encadeia as duas operações conforme necessário
+  try{
+    if(doVitals){
+      var data={ encounter_id:encounterId, spo2:spo2, hr:hr, rr:rr, bp_sys:bps, bp_dia:bpd, temp:temp };
+      google.script.run.withSuccessHandler(function(){
+        if(doNote){
+          google.script.run.withSuccessHandler(finish).withFailureHandler(fail).addSessionNote({ encounter_id:encounterId, subjective:soap, objective:'', assessment:'', plan:'' });
+        } else { finish(); }
+      }).withFailureHandler(fail).recordVitals(data);
+    } else if(doNote){
+      google.script.run.withSuccessHandler(finish).withFailureHandler(fail).addSessionNote({ encounter_id:encounterId, subjective:soap, objective:'', assessment:'', plan:'' });
+    } else {
+      // nada a salvar
+      finish();
     }
-  }
-  
-  debugDiv.innerHTML += '<div style="border-bottom: 1px solid #0f0; padding: 5px 0;">' +
-    '<strong>' + timestamp + '</strong>: ' + message + dataStr + '</div>';
-  debugDiv.scrollTop = debugDiv.scrollHeight;
+  }catch(e){ fail(e); }
 }
 
-function toggleDebug() {
-  var debugDiv = document.getElementById('debug-output');
-  if (debugDiv) {
-    debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
-  }
-}
+// =============================================================================
+// Relatórios (Docs-only)
+// =============================================================================
+function selectReportType(type){ var c=document.getElementById('report-form-container'); if(c) c.classList.remove('hidden'); var t=document.getElementById('report-type'); if(t) t.value=type; loadPatientsForReport(); }
+function cancelReportSelection(){ var c=document.getElementById('report-form-container'); if(c) c.classList.add('hidden'); var f=document.getElementById('report-generation-form'); if(f) f.reset(); }
+function loadPatientsForReport(){ var s=document.getElementById('report-patient-select'); if(!s) return; if(INITIAL_PATIENTS.length){ populateReportPatientSelect(INITIAL_PATIENTS); return; } google.script.run.withSuccessHandler(function(p){ populateReportPatientSelect(p||[]); }).withFailureHandler(function(){ s.innerHTML='<option value=\"\">Erro ao carregar pacientes</option>'; }).getFrontendPatients(); }
+function populateReportPatientSelect(patients){ var s=document.getElementById('report-patient-select'); if(!s) return; var h='<option value=\"\">Selecione um paciente...</option>'; patients.forEach(function(p){ h+='<option value=\"'+p.id+'\">'+escapeHtml(p.full_name)+' ('+calculateAge(p.birth_date)+' anos)</option>'; }); s.innerHTML=h; }
+function handleReportGenerationUpdated(e){ e.preventDefault(); var pid=document.getElementById('report-patient-select').value, type=document.getElementById('report-type').value; if(!pid){ showError('Selecione um paciente'); return; } var params={ patient_id:pid, type:type, format:'docs' }; generatePDFReportUpdated(params); }
+document.addEventListener('DOMContentLoaded', function(){ var f=document.getElementById('report-generation-form'); if(f) f.addEventListener('submit', handleReportGenerationUpdated); });
+function generatePDFReportUpdated(params){ showLoading(); var __pop=null; try{__pop=window.open('','_blank');}catch(e){} google.script.run.withSuccessHandler(function(res){ hideLoading(); if(res&&res.success&&res.url){ try{ if(__pop){ __pop.location=res.url; } else { window.open(res.url,'_blank'); } }catch(_){ window.open(res.url,'_blank'); } addReportToHistory({name:res.file_name,url:res.url,date:new Date().toISOString()}); } else { if(__pop){ try{__pop.close();}catch(_){}} showError('Erro ao gerar documento'); } }).withFailureHandler(function(err){ hideLoading(); if(__pop){ try{__pop.close();}catch(_){}} showError('Erro ao gerar documento: '+(err.message||err)); }).generateDocsReport(params); }
+function addReportToHistory(r){ var h=document.getElementById('reports-history'); if(!h) return; var item='<div class=\"bg-white border rounded p-3 flex justify-between items-center\"><div><p class=\"font-medium text-gray-800\">'+escapeHtml(r.name)+'</p><p class=\"text-xs text-gray-500\">'+formatDateTime(r.date)+'</p></div><a href=\"'+r.url+'\" target=\"_blank\" class=\"text-blue-600 hover:text-blue-800 text-sm\"><i class=\"fas fa-external-link-alt mr-1\"></i>Abrir</a></div>'; if(h.querySelector('p.italic')) h.innerHTML=''; h.insertAdjacentHTML('afterbegin', item); }
 
-// ============================================================================
-// USUÁRIO
-// ============================================================================
-
-function loadUser() {
-  debugLog('📄 Carregando usuário...');
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(user) {
-      debugLog('✅ Usuário recebido', user);
-      hideLoading();
-      
-      if (!user || !user.role) {
-        showError('Acesso negado. Usuário sem permissão.');
-        return;
-      }
-      
-      currentUser = user;
-      
-      var nameEl = document.getElementById('user-name');
-      var roleEl = document.getElementById('user-role');
-      
-      if (nameEl) nameEl.textContent = user.email || '';
-      if (roleEl) roleEl.textContent = user.role || '';
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao carregar usuário', error);
-      hideLoading();
-      showError('Erro ao carregar usuário: ' + (error.message || error));
-    })
-    .handleApiGet({ path: '/api/user' });
-}
-
-// ============================================================================
-// DASHBOARD
-// ============================================================================
-
-function updateDashboardStats(count) {
-  var statEl = document.getElementById('stat-patients');
-  if (statEl) {
-    statEl.textContent = count;
-  }
-}
-
-function loadDashboardStats() {
-  debugLog('📊 Usando pacientes do cache');
-  updateDashboardStats(INITIAL_PATIENTS.length);
-}
-
-// ============================================================================
-// NAVEGAÇÃO DE ABAS
-// ============================================================================
-
-function showTab(tabName, event) {
-  debugLog('🔀 Mudando para aba: ' + tabName);
-  
-  var tabs = document.querySelectorAll('.tab-btn');
-  for (var i = 0; i < tabs.length; i++) {
-    tabs[i].classList.remove('active');
-  }
-  
-  var contents = document.querySelectorAll('.tab-content');
-  for (var j = 0; j < contents.length; j++) {
-    contents[j].classList.add('hidden');
-  }
-  
-  if (event && event.target) {
-    var btn = event.target.closest('.tab-btn');
-    if (btn) btn.classList.add('active');
-  }
-  
-  var tabElement = document.getElementById(tabName + '-tab');
-  if (tabElement) {
-    tabElement.classList.remove('hidden');
-  }
-  
-  if (tabName === 'patients') {
-    loadPatients();
-  } else if (tabName === 'encounters') {
-    loadEncounters();
-  }
-}
-
-// ============================================================================
-// PACIENTES - LISTAGEM / BUSCA / MODAL
-// ============================================================================
-
-function loadPatients() {
-  debugLog('📄 Carregando pacientes...');
-  
-  // tenta usar cache primeiro
-  if (INITIAL_PATIENTS.length > 0) {
-    debugLog('✅ Usando pacientes do cache (' + INITIAL_PATIENTS.length + ')');
-    renderPatientsList(INITIAL_PATIENTS);
-    return;
-  }
-  
-  debugLog('⚠️ Cache vazio, tentando carregar via API...');
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(patients) {
-      debugLog('✅ Callback executado');
-      hideLoading();
-      
-      if (patients && Array.isArray(patients)) {
-        debugLog('✅ Total recebido: ' + patients.length);
-        INITIAL_PATIENTS = patients;
-        renderPatientsList(patients);
-      } else {
-        debugLog('⚠️ Resposta inválida');
-        showError('Erro: Dados inválidos do servidor');
-        renderPatientsList([]);
-      }
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro no callback', error);
-      hideLoading();
-      showError('Erro ao carregar: ' + (error.message || error));
-      renderPatientsList([]);
-    })
-    .getFrontendPatients();
-}
-
-/**
- * ============================================================================
- * FRONTEND - Tradução de Status para Português
- * ============================================================================
- */
-
-// ✅ MAPA DE TRADUÇÃO DE STATUS
-var STATUS_MAP = {
-  'ACTIVE': 'Ativo',
-  'INACTIVE': 'Inativo',
-  'DISCHARGED': 'Alta',
-  'TRANSFERRED': 'Transferido',
-  'DECEASED': 'Falecido'
-};
-
-// ✅ CLASSES DE COR POR STATUS
-var STATUS_CLASSES = {
-  'ACTIVE': 'bg-green-100 text-green-800',
-  'INACTIVE': 'bg-gray-100 text-gray-800',
-  'DISCHARGED': 'bg-blue-100 text-blue-800',
-  'TRANSFERRED': 'bg-yellow-100 text-yellow-800',
-  'DECEASED': 'bg-red-100 text-red-800'
-};
-
-/**
- * Traduz status para português
- */
-function translateStatus(status) {
-  if (!status) return 'Ativo';
-  var upperStatus = String(status).trim().toUpperCase();
-  return STATUS_MAP[upperStatus] || status;
-}
-
-/**
- * Retorna classe CSS para o status
- */
-function getStatusClass(status) {
-  if (!status) return STATUS_CLASSES['ACTIVE'];
-  var upperStatus = String(status).trim().toUpperCase();
-  return STATUS_CLASSES[upperStatus] || 'bg-gray-100 text-gray-800';
-}
-
-/**
- * Renderiza lista de pacientes (ATUALIZADA)
- */
-function renderPatientsList(patients) {
-  debugLog('🎨 Renderizando lista', {
-    type: typeof patients,
-    is_array: Array.isArray(patients),
-    length: patients ? patients.length : 0
-  });
-  
-  var container = document.getElementById('patients-list');
-  
-  if (!container) {
-    debugLog('❌ Container não encontrado');
-    showError('Erro: elemento patients-list não existe');
-    return;
-  }
-  
-  if (!patients || !Array.isArray(patients)) {
-    debugLog('⚠️ Dados inválidos');
-    container.innerHTML = '<p class="text-red-500 text-center py-8">Erro: dados inválidos</p>';
-    return;
-  }
-  
-  if (patients.length === 0) {
-    debugLog('⚠️ Lista vazia');
-    container.innerHTML = '<p class="text-gray-500 text-center py-8">Nenhum paciente cadastrado</p>';
-    return;
-  }
-  
-  debugLog('✅ Renderizando ' + patients.length + ' pacientes');
-  
-  var html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">';
-  
-  for (var i = 0; i < patients.length; i++) {
-    var patient = patients[i];
-    var age = calculateAge(patient.birth_date);
-    
-    // ✅ TRADUZ STATUS PARA PORTUGUÊS
-    var statusText = translateStatus(patient.status);
-    var statusClass = getStatusClass(patient.status);
-    
-    html += '<div class="patient-card bg-white p-4 rounded-lg shadow cursor-pointer" onclick="viewPatient(\'' + patient.id + '\')">';
-    html += '  <div class="flex items-start justify-between">';
-    html += '    <div class="flex-1">';
-    html += '      <h3 class="font-bold text-lg">' + escapeHtml(patient.full_name) + '</h3>';
-    html += '      <p class="text-sm text-gray-600">' + age + ' anos • ' + (patient.sex || '-') + '</p>';
-    html += '      <p class="text-xs text-gray-500 mt-1">CPF: ' + escapeHtml(String(patient.document_id || '')) + '</p>';
-    html += '    </div>';
-    
-    // ✅ BADGE DE STATUS EM PORTUGUÊS
-    html += '    <span class="text-xs px-2 py-1 rounded font-medium ' + statusClass + '">' + statusText + '</span>';
-    html += '  </div>';
-    
-    html += '  <div class="mt-3 flex space-x-2">';
-    html += '    <button onclick="event.stopPropagation(); startEncounter(\'' + patient.id + '\')" class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200">';
-    html += '      <i class="fas fa-play mr-1"></i>Atender';
-    html += '    </button>';
-    html += '    <button onclick="event.stopPropagation(); editPatient(\'' + patient.id + '\')" class="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200">';
-    html += '      <i class="fas fa-edit mr-1"></i>Editar';
-    html += '    </button>';
-    
-    // ✅ NOVO: BOTÃO PARA MUDAR STATUS
-    html += '    <button onclick="event.stopPropagation(); changePatientStatus(\'' + patient.id + '\')" class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200" title="Alterar Status">';
-    html += '      <i class="fas fa-exchange-alt"></i>';
-    html += '    </button>';
-    
-    html += '  </div>';
-    html += '</div>';
-  }
-  
-  html += '</div>';
-  
-  container.innerHTML = html;
-  debugLog('✅ Renderização concluída');
-}
-
-/**
- * ✅ NOVA FUNÇÃO: Alterar status do paciente
- */
-function changePatientStatus(patientId) {
-  debugLog('🔄 Alterando status do paciente: ' + patientId);
-  
-  var patient = INITIAL_PATIENTS.find(function(p) { return p.id === patientId; });
-  
-  if (!patient) {
-    showError('Paciente não encontrado');
-    return;
-  }
-  
-  showStatusChangeModal(patient);
-}
-
-/**
- * ✅ NOVA FUNÇÃO: Modal de mudança de status
- */
-function showStatusChangeModal(patient) {
-  var modal = document.getElementById('status-change-modal');
-  
-  if (!modal) {
-    createStatusChangeModal();
-    modal = document.getElementById('status-change-modal');
-  }
-  
-  // Preenche informações do paciente
-  document.getElementById('status-patient-name').textContent = patient.full_name;
-  document.getElementById('status-patient-id').value = patient.id;
-  
-  // Seleciona status atual
-  var currentStatus = patient.status || 'ACTIVE';
-  document.getElementById('new-status').value = currentStatus;
-  
-  modal.classList.remove('hidden');
-}
-
-/**
- * ✅ NOVA FUNÇÃO: Cria modal de mudança de status
- */
-function createStatusChangeModal() {
-  var modalHtml = `
-    <div id="status-change-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div class="bg-purple-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
-          <h3 class="text-xl font-bold">
-            <i class="fas fa-exchange-alt mr-2"></i>Alterar Status do Paciente
-          </h3>
-          <button onclick="closeStatusChangeModal()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <form id="status-change-form" class="p-6 space-y-4">
-          <input type="hidden" id="status-patient-id" />
-          
-          <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-            <p class="text-sm text-blue-800">
-              <i class="fas fa-user mr-2"></i>
-              <strong id="status-patient-name"></strong>
-            </p>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Novo Status <span class="text-red-500">*</span>
-            </label>
-            <select id="new-status" required 
-                    class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500">
-              <option value="ACTIVE">Ativo</option>
-              <option value="INACTIVE">Inativo</option>
-              <option value="DISCHARGED">Alta</option>
-              <option value="TRANSFERRED">Transferido</option>
-              <option value="DECEASED">Falecido</option>
-            </select>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Observações (opcional)
-            </label>
-            <textarea id="status-notes" rows="3"
-                      class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500" 
-                      placeholder="Motivo da mudança de status..."></textarea>
-          </div>
-          
-          <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4">
-            <p class="text-sm text-yellow-800">
-              <i class="fas fa-exclamation-triangle mr-2"></i>
-              Esta ação será registrada no histórico do paciente.
-            </p>
-          </div>
-          
-          <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button type="button" onclick="closeStatusChangeModal()" 
-                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancelar
-            </button>
-            <button type="submit" 
-                    class="btn-primary px-6 py-2 bg-purple-600 hover:bg-purple-700">
-              <i class="fas fa-check mr-2"></i>Confirmar Mudança
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-  
-  var div = document.createElement('div');
-  div.innerHTML = modalHtml;
-  document.body.appendChild(div);
-  
-  var form = document.getElementById('status-change-form');
-  if (form) form.addEventListener('submit', handleStatusChange);
-}
-
-/**
- * ✅ NOVA FUNÇÃO: Fecha modal de status
- */
-function closeStatusChangeModal() {
-  var modal = document.getElementById('status-change-modal');
-  if (modal) modal.classList.add('hidden');
-}
-
-/**
- * ✅ NOVA FUNÇÃO: Processa mudança de status
- */
-function handleStatusChange(e) {
-  e.preventDefault();
-  
-  var patientId = document.getElementById('status-patient-id').value;
-  var newStatus = document.getElementById('new-status').value;
-  var notes = document.getElementById('status-notes').value.trim();
-  
-  debugLog('💾 Mudando status do paciente...', {
-    patientId: patientId,
-    newStatus: newStatus,
-    notes: notes
-  });
-  
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(success) {
-      debugLog('✅ Status atualizado', success);
-      hideLoading();
-      
-      if (success) {
-        showSuccess('Status do paciente atualizado com sucesso!');
-        closeStatusChangeModal();
-        
-        // Atualiza cache local
-        var patient = INITIAL_PATIENTS.find(function(p) { return p.id === patientId; });
-        if (patient) {
-          patient.status = newStatus;
-        }
-        
-        // Recarrega lista
-        loadPatients();
-        
-        // Registra no log de auditoria (se houver observações)
-        if (notes) {
-          debugLog('📝 Registrando observação no histórico');
-        }
-      } else {
-        showError('Erro ao atualizar status do paciente');
-      }
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao atualizar status', error);
-      hideLoading();
-      showError('Erro ao atualizar status: ' + (error.message || error));
-    })
-    .updatePatient(patientId, { status: newStatus });
-}
-
-function searchPatients() {
-  var searchEl = document.getElementById('patient-search');
-  var query = searchEl ? searchEl.value : '';
-  if (query.length < 2) {
-    loadPatients();
-    return;
-  }
-  
-  debugLog('🔍 Buscando: ' + query);
-  
-  var filtered = INITIAL_PATIENTS.filter(function(p) {
-    var name = (p.full_name || '').toLowerCase();
-    var doc = String(p.document_id || '');
-    var q = query.toLowerCase();
-    return name.indexOf(q) !== -1 || doc.indexOf(query) !== -1;
-  });
-  
-  renderPatientsList(filtered);
-}
-
-// ============================================================================
-// PACIENTE - MODAL NOVO / EDITAR
-// ============================================================================
-
+</script><script>
+// ==================== Overrides: Pacientes (modal completo) ====================
 function showNewPatientModal() {
-  debugLog('🆕 Abrindo modal de novo paciente');
-  
   var modal = document.getElementById('patient-modal');
-  if (!modal) {
-    debugLog('⚠️ Modal não encontrado, criando...');
-    createPatientModal();
-    modal = document.getElementById('patient-modal');
-  }
-  
-  var form = document.getElementById('patient-form');
-  if (form) form.reset();
-  var titleEl = document.getElementById('patient-modal-title');
-  if (titleEl) titleEl.textContent = 'Novo Paciente';
-  var idEl = document.getElementById('patient-id');
-  if (idEl) idEl.value = '';
-  
+  if (!modal) { createPatientModal(); modal = document.getElementById('patient-modal'); }
+  var form = document.getElementById('patient-form'); if (form) form.reset();
+  var titleEl = document.getElementById('patient-modal-title'); if (titleEl) titleEl.textContent = 'Novo Paciente';
+  var idEl = document.getElementById('patient-id'); if (idEl) idEl.value = '';
   modal.classList.remove('hidden');
 }
-
 function editPatient(id) {
-  debugLog('✏️ Editar paciente: ' + id);
-  
-  var patient = INITIAL_PATIENTS.find(function(p) { return p.id === id; });
-  
-  if (!patient) {
-    showError('Paciente não encontrado');
-    return;
-  }
-  
-  var modal = document.getElementById('patient-modal');
-  if (!modal) {
-    createPatientModal();
-    modal = document.getElementById('patient-modal');
-  }
-  
-  var titleEl = document.getElementById('patient-modal-title');
-  if (titleEl) titleEl.textContent = 'Editar Paciente';
-  
+  var patient = (INITIAL_PATIENTS||[]).find(function(p){ return p.id === id; });
+  if (!patient) { showError('Paciente não encontrado'); return; }
+  var modal = document.getElementById('patient-modal'); if (!modal) { createPatientModal(); modal = document.getElementById('patient-modal'); }
+  var titleEl = document.getElementById('patient-modal-title'); if (titleEl) titleEl.textContent = 'Editar Paciente';
   document.getElementById('patient-id').value = patient.id;
   document.getElementById('full_name').value = patient.full_name || '';
   document.getElementById('birth_date').value = patient.birth_date || '';
   document.getElementById('sex').value = patient.sex || '';
   document.getElementById('document_id').value = patient.document_id || '';
   document.getElementById('neonatal_mother_id').value = patient.neonatal_mother_id || '';
-  
-  try {
-    var allergies = patient.allergies_json ? JSON.parse(patient.allergies_json) : (patient.allergies || []);
-    document.getElementById('allergies').value = Array.isArray(allergies) ? allergies.join(', ') : '';
-  } catch (e) {
-    document.getElementById('allergies').value = '';
-  }
-  
-  try {
-    var conditions = patient.conditions_json ? JSON.parse(patient.conditions_json) : (patient.conditions || []);
-    document.getElementById('conditions').value = Array.isArray(conditions) ? conditions.join(', ') : '';
-  } catch (e) {
-    document.getElementById('conditions').value = '';
-  }
-  
   modal.classList.remove('hidden');
 }
-
 function createPatientModal() {
-  var modalHtml = `
-    <div id="patient-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
-          <h3 id="patient-modal-title" class="text-xl font-bold">Novo Paciente</h3>
-          <button onclick="closePatientModal()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <form id="patient-form" class="p-6 space-y-4">
-          <input type="hidden" id="patient-id" />
-          
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Nome Completo <span class="text-red-500">*</span>
-              </label>
-              <input type="text" id="full_name" required 
-                     class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                     placeholder="Nome completo do paciente" />
-            </div>
-            
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Data de Nascimento <span class="text-red-500">*</span>
-              </label>
-              <input type="date" id="birth_date" required 
-                     class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
-            </div>
-            
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Sexo <span class="text-red-500">*</span>
-              </label>
-              <select id="sex" required 
-                      class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option value="">Selecione...</option>
-                <option value="M">Masculino</option>
-                <option value="F">Feminino</option>
-              </select>
-            </div>
-            
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                CPF <span class="text-red-500">*</span>
-              </label>
-              <input type="text" id="document_id" required 
-                     class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                     placeholder="000.000.000-00"
-                     maxlength="14" />
-            </div>
-            
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                ID Mãe (Neonatal)
-              </label>
-              <input type="text" id="neonatal_mother_id" 
-                     class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                     placeholder="Opcional - para neonatos" />
-            </div>
-            
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Alergias
-              </label>
-              <textarea id="allergies" rows="2"
-                        class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                        placeholder="Liste as alergias conhecidas (separadas por vírgula)"></textarea>
-            </div>
-            
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Condições Pré-existentes
-              </label>
-              <textarea id="conditions" rows="2"
-                        class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                        placeholder="Liste as condições médicas (separadas por vírgula)"></textarea>
-            </div>
-          </div>
-          
-          <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button type="button" onclick="closePatientModal()" 
-                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancelar
-            </button>
-            <button type="submit" 
-                    class="btn-primary px-6 py-2">
-              <i class="fas fa-save mr-2"></i>Salvar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-  
-  var div = document.createElement('div');
-  div.innerHTML = modalHtml;
-  document.body.appendChild(div);
-  
-  var form = document.getElementById('patient-form');
-  if (form) form.addEventListener('submit', handlePatientSubmit);
-  
-  var cpfInput = document.getElementById('document_id');
-  if (cpfInput) {
-    cpfInput.addEventListener('input', function(e) {
-      var v = e.target.value.replace(/\D/g, '');
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-      e.target.value = v;
-    });
-  }
+  var modalHtml = "\
+    <div id=\"patient-modal\" class=\"hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50\">\
+      <div class=\"bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto\">\
+        <div class=\"bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center\">\
+          <h3 id=\"patient-modal-title\" class=\"text-xl font-bold\">Novo Paciente</h3>\
+          <button onclick=\"closePatientModal()\" class=\"text-white hover:text-gray-200\"><i class=\"fas fa-times text-xl\"></i></button>\
+        </div>\
+        <form id=\"patient-form\" class=\"p-6 space-y-4\">\
+          <input type=\"hidden\" id=\"patient-id\" />\
+          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\
+            <div class=\"md:col-span-2\">\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Nome Completo <span class=\"text-red-500\">*</span></label>\
+              <input type=\"text\" id=\"full_name\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"Nome completo do paciente\" />\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Data de Nascimento <span class=\"text-red-500\">*</span></label>\
+              <input type=\"date\" id=\"birth_date\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" />\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Sexo <span class=\"text-red-500\">*</span></label>\
+              <select id=\"sex\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\"><option value=\"\">Selecione...</option><option value=\"M\">Masculino</option><option value=\"F\">Feminino</option></select>\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">CPF <span class=\"text-red-500\">*</span></label>\
+              <input type=\"text\" id=\"document_id\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"000.000.000-00\" maxlength=\"14\" />\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">ID Mãe (Neonatal)</label>\
+              <input type=\"text\" id=\"neonatal_mother_id\" class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"Opcional\" />\
+            </div>\
+          </div>\
+          <div class=\"flex justify-end space-x-3 pt-4 border-t\">\
+            <button type=\"button\" onclick=\"closePatientModal()\" class=\"px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50\">Cancelar</button>\
+            <button type=\"submit\" class=\"btn-primary px-6 py-2\"><i class=\"fas fa-save mr-2\"></i>Salvar</button>\
+          </div>\
+        </form>\
+      </div>\
+    </div>";
+  var div = document.createElement('div'); div.innerHTML = modalHtml; document.body.appendChild(div);
+  var form = document.getElementById('patient-form'); if (form) form.addEventListener('submit', handlePatientSubmit);
+  var cpf = document.getElementById('document_id'); if (cpf) cpf.addEventListener('input', function(e){ var v=e.target.value.replace(/\D/g,''); v=v.replace(/(\d{3})(\d)/,'$1.$2'); v=v.replace(/(\d{3})(\d)/,'$1.$2'); v=v.replace(/(\d{3})(\d{1,2})$/,'$1-$2'); e.target.value=v; });
 }
+function closePatientModal(){ var m=document.getElementById('patient-modal'); if(m) m.classList.add('hidden'); }
+function handlePatientSubmit(e){ e.preventDefault(); var id=document.getElementById('patient-id').value; var data={ full_name:document.getElementById('full_name').value.trim(), birth_date:document.getElementById('birth_date').value, sex:document.getElementById('sex').value, document_id:document.getElementById('document_id').value.replace(/\D/g,''), neonatal_mother_id:document.getElementById('neonatal_mother_id').value.trim() }; showLoading(); if(id){ google.script.run.withSuccessHandler(function(ok){ hideLoading(); if(ok){ showSuccess('Paciente atualizado com sucesso!'); closePatientModal(); var idx=INITIAL_PATIENTS.findIndex(function(p){return p.id===id;}); if(idx>-1) INITIAL_PATIENTS[idx]=Object.assign(INITIAL_PATIENTS[idx], data); loadPatients(); } else showError('Erro ao atualizar paciente'); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao atualizar paciente: '+(err.message||err)); }).updatePatient(id,data); } else { google.script.run.withSuccessHandler(function(p){ hideLoading(); if(p&&p.id){ showSuccess('Paciente cadastrado com sucesso!'); closePatientModal(); INITIAL_PATIENTS.push(p); loadPatients(); } else showError('Erro ao criar paciente'); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao cadastrar paciente: '+(err.message||err)); }).createPatient(data); } }
 
-function closePatientModal() {
-  debugLog('❌ Fechando modal');
-  var modal = document.getElementById('patient-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
+// ==================== Overrides: Atendimento (modal completo) ====================
+function showEncounterModal(){ var modal=document.getElementById('encounter-modal'); if(!modal){ createEncounterModal(); modal=document.getElementById('encounter-modal'); } var n=document.getElementById('encounter-patient-name'); if(n) n.textContent=currentPatient.full_name; var info=document.getElementById('encounter-patient-info'); if(info) info.textContent = calculateAge(currentPatient.birth_date)+' anos • '+(currentPatient.sex||'-')+' • CPF: '+(currentPatient.document_id||''); var form=document.getElementById('encounter-form'); if(form) form.reset(); try{ loadProfessionalsForEncounter(); }catch(e){} modal.classList.remove('hidden'); }
+function createEncounterModal(){ var h="\
+  <div id=\"encounter-modal\" class=\"hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto\">\
+    <div class=\"bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto\">\
+      <div class=\"bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10\">\
+        <div><h3 class=\"text-xl font-bold\">Novo Atendimento</h3><p class=\"text-sm text-blue-100\"><span id=\"encounter-patient-name\"></span> • <span id=\"encounter-patient-info\"></span></p></div>\
+        <button onclick=\"closeEncounterModal()\" class=\"text-white hover:text-gray-200\"><i class=\"fas fa-times text-xl\"></i></button>\
+      </div>\
+      <form id=\"encounter-form\" class=\"p-6 space-y-6\">\
+        <div class=\"border-b pb-4\">\
+          <h4 class=\"text-lg font-bold mb-3 text-gray-700\"><i class=\"fas fa-info-circle mr-2 text-blue-600\"></i>Informações do Atendimento</h4>\
+          <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">\
+            <div class=\"md:col-span-2\">\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Profissional <span class=\"text-red-500\">*</span> <button type=\"button\" onclick=\"showProfessionalModalFromDashboard()\" class=\"text-xs text-blue-200 underline ml-2\">Cadastrar</button></label>\
+              <select id=\"encounter-professional\" required class=\"form-input w-full px-3 py-2 border rounded-lg\"><option value=\"\">Carregando profissionais...</option></select>\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Local <span class=\"text-red-500\">*</span></label>\
+              <select id=\"encounter-location\" required class=\"form-input w-full px-3 py-2 border rounded-lg\"><option value=\"\">Selecione...</option><option value=\"AMBULATORIO\">Ambulatório</option><option value=\"LEITO\">Leito</option><option value=\"UTI\">UTI</option><option value=\"EMERGENCIA\">Emergência</option></select>\
+            </div>\
+            <div>\
+              <label class=\"block text-sm font-medium text-gray-700 mb-1\">Tipo <span class=\"text-red-500\">*</span></label>\
+              <select id=\"encounter-type\" required class=\"form-input w-full px-3 py-2 border rounded-lg\"><option value=\"\">Selecione...</option><option value=\"AVALIACAO\">Avaliação Inicial</option><option value=\"REAVALIACAO\">Reavaliação</option><option value=\"TRATAMENTO\">Tratamento</option><option value=\"ALTA\">Alta</option></select>\
+            </div>\
+          </div>\
+        </div>\
+        <div class=\"border-b pb-4\">\
+          <h4 class=\"text-lg font-bold mb-3 text-gray-700\"><i class=\"fas fa-heartbeat mr-2 text-red-600\"></i>Sinais Vitais</h4>\
+          <div class=\"grid grid-cols-2 md:grid-cols-3 gap-4\">\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">SpO₂ (%)</label><input type=\"number\" id=\"vitals-spo2\" min=\"0\" max=\"100\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"95-100\"/></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">FC (bpm)</label><input type=\"number\" id=\"vitals-hr\" min=\"0\" max=\"300\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"60-100\"/></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">FR (ipm)</label><input type=\"number\" id=\"vitals-rr\" min=\"0\" max=\"100\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"12-20\"/></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">PA Sistólica</label><input type=\"number\" id=\"vitals-bp-sys\" min=\"0\" max=\"300\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"120\"/></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">PA Diastólica</label><input type=\"number\" id=\"vitals-bp-dia\" min=\"0\" max=\"200\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"80\"/></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">Temp (°C)</label><input type=\"number\" id=\"vitals-temp\" min=\"30\" max=\"45\" step=\"0.1\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"36.5\"/></div>\
+          </div>\
+        </div>\
+        <div class=\"border-b pb-4\">\
+          <h4 class=\"text-lg font-bold mb-3 text-gray-700\"><i class=\"fas fa-file-medical mr-2 text-green-600\"></i>Evolução SOAP</h4>\
+          <div class=\"space-y-3\">\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\"><span class=\"bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold mr-2\">S</span>Subjetivo</label><textarea id=\"soap-subjective\" rows=\"2\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"O que o paciente relata?\"></textarea></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\"><span class=\"bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-bold mr-2\">O</span>Objetivo</label><textarea id=\"soap-objective\" rows=\"2\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"O que você observou?\"></textarea></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\"><span class=\"bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-bold mr-2\">A</span>Avaliação</label><textarea id=\"soap-assessment\" rows=\"2\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"Sua interpretação clínica\"></textarea></div>\
+            <div><label class=\"block text-sm font-medium text-gray-700 mb-1\"><span class=\"bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs font-bold mr-2\">P</span>Plano</label><textarea id=\"soap-plan\" rows=\"2\" class=\"form-input w-full px-3 py-2 border rounded-lg\" placeholder=\"Condutas\"></textarea></div>\
+          </div>\
+        </div>\
+        <div class=\"flex justify-end space-x-3 pt-4\"><button type=\"button\" onclick=\"closeEncounterModal()\" class=\"px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50\">Cancelar</button><button type=\"submit\" class=\"btn-primary px-6 py-2\"><i class=\"fas fa-save mr-2\"></i>Salvar Atendimento</button></div>\
+      </form>\
+    </div>\
+  </div>"; var d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); document.getElementById('encounter-form').addEventListener('submit', handleEncounterSubmit); }
+function closeEncounterModal(){ var m=document.getElementById('encounter-modal'); if(m) m.classList.add('hidden'); }
+function handleEncounterSubmit(e){ e.preventDefault(); if(!currentPatient){ showError('Nenhum paciente selecionado'); return; } var prof=document.getElementById('encounter-professional').value; if(!prof){ showError('Selecione o profissional do atendimento'); return; } showLoading(); var encounterData={ patient_id: currentPatient.id, professional_id: prof, location: document.getElementById('encounter-location').value, type: document.getElementById('encounter-type').value }; google.script.run.withSuccessHandler(function(enc){ currentEncounter=enc; saveVitals(enc.id); saveSOAP(enc.id); closeEncounterAndFinish(enc.id); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao iniciar atendimento: '+(err.message||err)); }).openEncounter(encounterData); }
+function saveVitals(encId){ var spo2=document.getElementById('vitals-spo2').value, hr=document.getElementById('vitals-hr').value, rr=document.getElementById('vitals-rr').value, bps=document.getElementById('vitals-bp-sys').value, bpd=document.getElementById('vitals-bp-dia').value, temp=document.getElementById('vitals-temp').value; if(!spo2&&!hr&&!rr&&!bps&&!bpd&&!temp) return; var data={ encounter_id:encId, spo2:spo2, hr:hr, rr:rr, bp_sys:bps, bp_dia:bpd, temp:temp }; google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(e){ console.error(e); }).recordVitals(data); }
+function saveSOAP(encId){ var s=document.getElementById('soap-subjective').value.trim(), o=document.getElementById('soap-objective').value.trim(), a=document.getElementById('soap-assessment').value.trim(), p=document.getElementById('soap-plan').value.trim(); if(!s&&!o&&!a&&!p) return; var data={ encounter_id:encId, subjective:s, objective:o, assessment:a, plan:p }; google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(e){ console.error(e); }).addSessionNote(data); }
+function closeEncounterAndFinish(encId){ google.script.run.withSuccessHandler(function(ok){ hideLoading(); showSuccess('Atendimento registrado com sucesso!'); closeEncounterModal(); currentEncounter=null; loadDashboardStats(); }).withFailureHandler(function(err){ hideLoading(); showError('Atendimento salvo, mas erro ao finalizar: '+(err.message||err)); closeEncounterModal(); }).closeEncounter(encId); }
+
+// ==================== Overrides: Detalhes do atendimento ====================
+function viewEncounterDetails(encounterId){ showLoading(); google.script.run.withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.data){ showEncounterDetailsModal(resp.data); } else { tryDirectMethod(encounterId); } }).withFailureHandler(function(){ hideLoading(); tryDirectMethod(encounterId); }).handleApiGet({ path: '/api/encounters/details', id: encounterId }); }
+function tryDirectMethod(encounterId){ showLoading(); google.script.run.withSuccessHandler(function(details){ hideLoading(); if(details) showEncounterDetailsModal(details); else tryLocalFallback(encounterId); }).withFailureHandler(function(){ hideLoading(); tryLocalFallback(encounterId); }).getEncounterDetails(encounterId); }
+function tryLocalFallback(encounterId){ var enc=(window.ENCOUNTERS_CACHE_BY_ID||{})[encounterId]; if(!enc){ showError('Atendimento não encontrado'); return; } var patient=(INITIAL_PATIENTS||[]).find(function(p){return p.id===enc.patient_id;})||{}; var data={ encounter:{ id:enc.id, patient_id:enc.patient_id, started_at:enc.started_at, ended_at:enc.ended_at, location:enc.location, type:enc.type }, patient:patient, professional:{ full_name:enc.professional_name||'N/A', crefito:enc.professional_crefito||'' }, notes:enc.notes||[], vitals:enc.vitals||[], assessments:enc.assessments||[], procedures:enc.procedures||[] }; showEncounterDetailsModal(data); }
+function showEncounterDetailsModal(data){ var m=document.getElementById('encounter-details-modal'); if(!m){ createEncounterDetailsModal(); m=document.getElementById('encounter-details-modal'); } fillEncounterDetails(data); m.classList.remove('hidden'); }
+function createEncounterDetailsModal(){ var h="\
+  <div id=\"encounter-details-modal\" class=\"hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto\">\
+    <div class=\"bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto\">\
+      <div class=\"bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10\">\
+        <div><h3 class=\"text-xl font-bold\">Detalhes do Atendimento</h3><p id=\"encounter-detail-subtitle\" class=\"text-sm text-blue-100\"></p></div>\
+        <button onclick=\"closeEncounterDetailsModal()\" class=\"text-white hover:text-gray-200\"><i class=\"fas fa-times text-xl\"></i></button>\
+      </div>\
+      <div id=\"encounter-detail-content\" class=\"p-6\"></div>\
+    </div>\
+  </div>"; var d=document.createElement('div'); d.innerHTML=h; document.body.appendChild(d); }
+function fillEncounterDetails(data){ var sub=document.getElementById('encounter-detail-subtitle'), c=document.getElementById('encounter-detail-content'); if(!data||!data.encounter){ if(c) c.innerHTML='<p class="text-red-500 text-center py-8">Erro ao carregar detalhes do atendimento</p>'; return; } var enc=data.encounter, patient=data.patient||{}, professional=data.professional||{}, notes=data.notes||[], vitals=data.vitals||[], assessments=data.assessments||[], procedures=data.procedures||[]; if(sub) sub.textContent=(patient.full_name||'Paciente')+' • '+formatDateTime(enc.started_at); var h=''; h+='<div class="mb-6 border-b pb-4"><h4 class="text-lg font-bold mb-3 text-gray-700"><i class="fas fa-info-circle mr-2 text-blue-600"></i>Informações do Atendimento</h4><div class="grid grid-cols-2 gap-4 text-sm"><div><span class="text-gray-500">Profissional:</span> <span class="font-medium">'+escapeHtml(professional.full_name||'N/A')+'</span></div><div><span class="text-gray-500">CREFITO:</span> <span class="font-medium">'+escapeHtml(professional.crefito||'-')+'</span></div><div><span class="text-gray-500">Local:</span> <span class="font-medium">'+escapeHtml(enc.location||'-')+'</span></div><div><span class="text-gray-500">Tipo:</span> <span class="font-medium">'+escapeHtml(enc.type||'-')+'</span></div><div><span class="text-gray-500">Início:</span> <span class="font-medium">'+formatDateTime(enc.started_at)+'</span></div><div><span class="text-gray-500">Fim:</span> <span class="font-medium">'+(enc.ended_at?formatDateTime(enc.ended_at):'Em andamento')+'</span></div></div></div>'; if(vitals.length>0){ h+='<div class="mb-6 border-b pb-4"><h4 class="text-lg font-bold mb-3 text-gray-700"><i class="fas fa-heartbeat mr-2 text-red-600"></i>Sinais Vitais</h4>'; vitals.forEach(function(v){ h+='<div class="bg-gray-50 p-3 rounded mb-2"><p class="text-xs text-gray-500 mb-2">'+formatDateTime(v.recorded_at)+'</p><div class="grid grid-cols-3 md:grid-cols-6 gap-3 text-sm">'+(v.spo2?'<div><span class="text-gray-600">SpO₂:</span> <span class="font-bold">'+v.spo2+'%</span></div>':'')+(v.hr?'<div><span class="text-gray-600">FC:</span> <span class="font-bold">'+v.hr+' bpm</span></div>':'')+(v.rr?'<div><span class="text-gray-600">FR:</span> <span class="font-bold">'+v.rr+' ipm</span></div>':'')+((v.bp_sys&&v.bp_dia)?'<div><span class="text-gray-600">PA:</span> <span class="font-bold">'+v.bp_sys+'/'+v.bp_dia+' mmHg</span></div>':'')+(v.temp?'<div><span class="text-gray-600">Temp:</span> <span class="font-bold">'+v.temp+'°C</span></div>':'')+'</div></div>'; }); h+='</div>'; }
+ if(notes.length>0){ h+='<div class="mb-6 border-b pb-4"><h4 class="text-lg font-bold mb-3 text-gray-700"><i class="fas fa-file-medical mr-2 text-green-600"></i>Evolução SOAP</h4>'; notes.forEach(function(n){ h+='<div class="bg-gray-50 p-4 rounded mb-3"><p class="text-xs text-gray-500 mb-3">'+formatDateTime(n.recorded_at)+'</p>'+(n.subjective?'<div class="mb-3"><span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold mr-2">S</span><span class="text-sm text-gray-700">'+escapeHtml(n.subjective)+'</span></div>':'')+(n.objective?'<div class="mb-3"><span class="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-bold mr-2">O</span><span class="text-sm text-gray-700">'+escapeHtml(n.objective)+'</span></div>':'')+(n.assessment?'<div class="mb-3"><span class="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-bold mr-2">A</span><span class="text-sm text-gray-700">'+escapeHtml(n.assessment)+'</span></div>':'')+(n.plan?'<div><span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs font-bold mr-2">P</span><span class="text-sm text-gray-700">'+escapeHtml(n.plan)+'</span></div>':'')+'</div>'; }); h+='</div>'; }
+ if(assessments.length>0){ h+='<div class="mb-6 border-b pb-4"><h4 class="text-lg font-bold mb-3 text-gray-700"><i class="fas fa-clipboard-check mr-2 text-purple-600"></i>Avaliações</h4>'; assessments.forEach(function(a){ h+='<div class="bg-gray-50 p-3 rounded mb-2"><div class="flex justify-between items-start mb-2"><span class="font-bold text-gray-700">'+escapeHtml(a.tool||'')+'</span><span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-bold">Score: '+(a.score||0)+'</span></div><p class="text-xs text-gray-500">'+formatDateTime(a.recorded_at)+'</p></div>'; }); h+='</div>'; }
+ if(procedures.length>0){ h+='<div class="mb-6"><h4 class="text-lg font-bold mb-3 text-gray-700"><i class="fas fa-tasks mr-2 text-orange-600"></i>Procedimentos</h4>'; procedures.forEach(function(p){ h+='<div class="bg-gray-50 p-3 rounded mb-2"><div class="flex justify-between items-start"><div><span class="font-medium text-gray-700">'+escapeHtml(p.description||'Sem descrição')+'</span><p class="text-xs text-gray-500 mt-1">'+formatDateTime(p.recorded_at)+'</p></div>'+(p.code?('<span class="text-xs bg-gray-200 px-2 py-1 rounded">'+escapeHtml(p.code)+'</span>'):'')+'</div></div>'; }); h+='</div>'; }
+ if(vitals.length===0 && notes.length===0 && assessments.length===0 && procedures.length===0){ h+='<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-6xl mb-4"></i><p class="text-lg">Nenhum dado clínico registrado</p></div>'; }
+ c.innerHTML = h;
 }
-
-function handlePatientSubmit(e) {
-  e.preventDefault();
-  debugLog('💾 Salvando paciente...');
-  
-  var patientId = document.getElementById('patient-id').value;
-  var allergiesText = document.getElementById('allergies').value.trim();
-  var conditionsText = document.getElementById('conditions').value.trim();
-  
-  var data = {
-    full_name: document.getElementById('full_name').value.trim(),
-    birth_date: document.getElementById('birth_date').value,
-    sex: document.getElementById('sex').value,
-    document_id: document.getElementById('document_id').value.replace(/\D/g, ''),
-    neonatal_mother_id: document.getElementById('neonatal_mother_id').value.trim(),
-    allergies: allergiesText ? allergiesText.split(',').map(function(s) { return s.trim(); }) : [],
-    conditions: conditionsText ? conditionsText.split(',').map(function(s) { return s.trim(); }) : []
-  };
-  
-  if (patientId) {
-    data.id = patientId;
-  }
-  
-  debugLog('📤 Dados do paciente', data);
-  showLoading();
-  
-  if (patientId) {
-    // update
-    google.script.run
-      .withSuccessHandler(function(result) {
-        debugLog('✅ Paciente atualizado', result);
-        hideLoading();
-        
-        if (result) {
-          showSuccess('Paciente atualizado com sucesso!');
-          closePatientModal();
-          
-          // [MERGE] atualizar cache local imediatamente
-          var index = INITIAL_PATIENTS.findIndex(function(p) { return p.id === patientId; });
-          if (index !== -1) {
-            INITIAL_PATIENTS[index] = Object.assign(INITIAL_PATIENTS[index], data);
-          }
-          
-          loadPatients();
-        } else {
-          showError('Erro ao atualizar paciente');
-        }
-      })
-      .withFailureHandler(function(error) {
-        debugLog('❌ Erro ao atualizar', error);
-        hideLoading();
-        showError('Erro ao atualizar paciente: ' + (error.message || error));
-      })
-      .updatePatient(patientId, data);
-  } else {
-    // create
-    google.script.run
-      .withSuccessHandler(function(patient) {
-        debugLog('✅ Paciente criado', patient);
-        hideLoading();
-        
-        if (patient && patient.id) {
-          showSuccess('Paciente cadastrado com sucesso!');
-          closePatientModal();
-          
-          INITIAL_PATIENTS.push(patient);
-          loadPatients();
-        } else {
-          showError('Erro ao criar paciente');
-        }
-      })
-      .withFailureHandler(function(error) {
-        debugLog('❌ Erro ao criar', error);
-        hideLoading();
-        showError('Erro ao cadastrar paciente: ' + (error.message || error));
-      })
-      .createPatient(data);
-  }
-}
-
-// Visualizar paciente hoje abre o modal de edição
-function viewPatient(id) {
-  debugLog('👁️ Visualizar paciente: ' + id);
-  editPatient(id);
-}
-
-// ============================================================================
-// ATENDIMENTO - MODAL E FLUXO
-// ============================================================================
-
-function startEncounter(patientId) {
-  debugLog('🏥 Iniciar atendimento: ' + patientId);
-  
-  var patient = INITIAL_PATIENTS.find(function(p) { return p.id === patientId; });
-  
-  if (!patient) {
-    showError('Paciente não encontrado');
-    return;
-  }
-  
-  currentPatient = patient;
-  showEncounterModal();
-}
-
-function showEncounterModal() {
-  var modal = document.getElementById('encounter-modal');
-  if (!modal) {
-    createEncounterModal();
-    modal = document.getElementById('encounter-modal');
-  }
-  
-  // Preenche informações do paciente
-  var nameEl = document.getElementById('encounter-patient-name');
-  if (nameEl) nameEl.textContent = currentPatient.full_name;
-  var infoEl = document.getElementById('encounter-patient-info');
-  if (infoEl) {
-    infoEl.textContent = 
-      calculateAge(currentPatient.birth_date) + ' anos • ' + (currentPatient.sex || '-') + ' • CPF: ' + (currentPatient.document_id || '');
-  }
-  
-  // Limpa formulário
-  var form = document.getElementById('encounter-form');
-  if (form) form.reset();
-  
-  // Carrega profissionais
-  try { loadProfessionalsForEncounter(); } catch (e) { debugLog('⚠️ Falha ao carregar profissionais', e); }
-  
-  modal.classList.remove('hidden');
-}
-
-function createEncounterModal() {
-  var modalHtml = `
-    <div id="encounter-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto">
-        <div class="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10">
-          <div>
-            <h3 class="text-xl font-bold">Novo Atendimento</h3>
-            <p class="text-sm text-blue-100">
-              <span id="encounter-patient-name"></span> • <span id="encounter-patient-info"></span>
-            </p>
-          </div>
-          <button onclick="closeEncounterModal()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <form id="encounter-form" class="p-6 space-y-6">
-          <!-- Informações do Atendimento -->
-          <div class="border-b pb-4">
-            <h4 class="text-lg font-bold mb-3 text-gray-700">
-              <i class="fas fa-info-circle mr-2 text-blue-600"></i>Informações do Atendimento
-            </h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  Profissional <span class="text-red-500">*</span>
-                  <button type="button" onclick="showProfessionalModal()" class="text-xs text-blue-600 underline ml-2">Cadastrar</button> <!-- [MERGE] botão cadastrar inline -->
-                </label>
-                <select id="encounter-professional" required 
-                        class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="">Carregando profissionais...</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  Local <span class="text-red-500">*</span>
-                </label>
-                <select id="encounter-location" required 
-                        class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="">Selecione...</option>
-                  <option value="AMBULATORIO">Ambulatório</option>
-                  <option value="LEITO">Leito</option>
-                  <option value="UTI">UTI</option>
-                  <option value="EMERGENCIA">Emergência</option>
-                </select>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo <span class="text-red-500">*</span>
-                </label>
-                <select id="encounter-type" required 
-                        class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option value="">Selecione...</option>
-                  <option value="AVALIACAO">Avaliação Inicial</option>
-                  <option value="REAVALIACAO">Reavaliação</option>
-                  <option value="TRATAMENTO">Tratamento</option>
-                  <option value="ALTA">Alta</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sinais Vitais -->
-          <div class="border-b pb-4">
-            <h4 class="text-lg font-bold mb-3 text-gray-700">
-              <i class="fas fa-heartbeat mr-2 text-red-600"></i>Sinais Vitais
-            </h4>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">SpO₂ (%)</label>
-                <input type="number" id="vitals-spo2" min="0" max="100" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="95-100" />
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">FC (bpm)</label>
-                <input type="number" id="vitals-hr" min="0" max="300" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="60-100" />
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">FR (ipm)</label>
-                <input type="number" id="vitals-rr" min="0" max="100" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="12-20" />
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">PA Sistólica</label>
-                <input type="number" id="vitals-bp-sys" min="0" max="300" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="120" />
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">PA Diastólica</label>
-                <input type="number" id="vitals-bp-dia" min="0" max="200" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="80" />
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Temp (°C)</label>
-                <input type="number" id="vitals-temp" min="30" max="45" step="0.1" 
-                       class="form-input w-full px-3 py-2 border rounded-lg" placeholder="36.5" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Nota SOAP -->
-          <div class="border-b pb-4">
-            <h4 class="text-lg font-bold mb-3 text-gray-700">
-              <i class="fas fa-file-medical mr-2 text-green-600"></i>Evolução SOAP
-            </h4>
-            
-            <div class="space-y-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold mr-2">S</span>
-                  Subjetivo
-                </label>
-                <textarea id="soap-subjective" rows="2" 
-                          class="form-input w-full px-3 py-2 border rounded-lg" 
-                          placeholder="O que o paciente relata? Queixas, sintomas..."></textarea>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  <span class="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-bold mr-2">O</span>
-                  Objetivo
-                </label>
-                <textarea id="soap-objective" rows="2" 
-                          class="form-input w-full px-3 py-2 border rounded-lg" 
-                          placeholder="O que você observou? Dados objetivos, testes..."></textarea>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  <span class="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-bold mr-2">A</span>
-                  Avaliação
-                </label>
-                <textarea id="soap-assessment" rows="2" 
-                          class="form-input w-full px-3 py-2 border rounded-lg" 
-                          placeholder="Sua interpretação clínica, diagnóstico fisioterapêutico..."></textarea>
-              </div>
-              
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs font-bold mr-2">P</span>
-                  Plano
-                </label>
-                <textarea id="soap-plan" rows="2" 
-                          class="form-input w-full px-3 py-2 border rounded-lg" 
-                          placeholder="Condutas, tratamento planejado, orientações..."></textarea>
-              </div>
-            </div>
-          </div>
-
-          <!-- Botões -->
-          <div class="flex justify-end space-x-3 pt-4">
-            <button type="button" onclick="closeEncounterModal()" 
-                    class="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancelar
-            </button>
-            <button type="submit" 
-                    class="btn-primary px-6 py-2">
-              <i class="fas fa-save mr-2"></i>Salvar Atendimento
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-  
-  var div = document.createElement('div');
-  div.innerHTML = modalHtml;
-  document.body.appendChild(div);
-  
-  var form = document.getElementById('encounter-form');
-  if (form) form.addEventListener('submit', handleEncounterSubmit);
-}
-
-function closeEncounterModal() {
-  var modal = document.getElementById('encounter-modal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-}
-
-function handleEncounterSubmit(e) {
-  e.preventDefault();
-  debugLog('💾 Salvando atendimento...');
-  
-  if (!currentPatient) {
-    showError('Nenhum paciente selecionado');
-    return;
-  }
-  
-  // Profissional obrigatório
-  var profEl = document.getElementById('encounter-professional');
-  var professionalId = profEl ? profEl.value : '';
-  if (!professionalId) {
-    showError('Selecione o profissional do atendimento');
-    return;
-  }
-  
-  showLoading();
-  
-  // 1. Dados do atendimento
-  var encounterData = {
-    patient_id: currentPatient.id,
-    professional_id: professionalId,
-    location: document.getElementById('encounter-location').value,
-    type: document.getElementById('encounter-type').value
-  };
-  
-  debugLog('📋 Dados do atendimento', encounterData);
-  
-  // Abre o atendimento primeiro
-  google.script.run
-    .withSuccessHandler(function(encounter) {
-      debugLog('✅ Atendimento aberto', encounter);
-      currentEncounter = encounter;
-      
-      // 2. Salva sinais vitais (se preenchidos)
-      saveVitals(encounter.id);
-      
-      // 3. Salva nota SOAP (se preenchida)
-      saveSOAP(encounter.id);
-      
-      // 4. Fecha o atendimento
-      closeEncounterAndFinish(encounter.id);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao abrir atendimento', error);
-      hideLoading();
-      showError('Erro ao iniciar atendimento: ' + (error.message || error));
-    })
-    .openEncounter(encounterData);
-}
-
-function saveVitals(encounterId) {
-  var spo2 = document.getElementById('vitals-spo2').value;
-  var hr = document.getElementById('vitals-hr').value;
-  var rr = document.getElementById('vitals-rr').value;
-  var bpSys = document.getElementById('vitals-bp-sys').value;
-  var bpDia = document.getElementById('vitals-bp-dia').value;
-  var temp = document.getElementById('vitals-temp').value;
-  
-  // Só salva se pelo menos um campo foi preenchido
-  if (!spo2 && !hr && !rr && !bpSys && !bpDia && !temp) {
-    debugLog('⏭️ Nenhum sinal vital preenchido, pulando...');
-    return;
-  }
-  
-  var vitalsData = {
-    encounter_id: encounterId,
-    spo2: spo2,
-    hr: hr,
-    rr: rr,
-    bp_sys: bpSys,
-    bp_dia: bpDia,
-    temp: temp
-  };
-  
-  debugLog('💉 Salvando sinais vitais', vitalsData);
-  
-  google.script.run
-    .withSuccessHandler(function(result) {
-      debugLog('✅ Sinais vitais salvos', result);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('⚠️ Erro ao salvar sinais vitais', error);
-    })
-    .recordVitals(vitalsData);
-}
-
-function saveSOAP(encounterId) {
-  var subjective = document.getElementById('soap-subjective').value.trim();
-  var objective = document.getElementById('soap-objective').value.trim();
-  var assessment = document.getElementById('soap-assessment').value.trim();
-  var plan = document.getElementById('soap-plan').value.trim();
-  
-  // Só salva se pelo menos um campo foi preenchido
-  if (!subjective && !objective && !assessment && !plan) {
-    debugLog('⏭️ Nenhuma nota SOAP preenchida, pulando...');
-    return;
-  }
-  
-  var soapData = {
-    encounter_id: encounterId,
-    subjective: subjective,
-    objective: objective,
-    assessment: assessment,
-    plan: plan
-  };
-  
-  debugLog('📝 Salvando nota SOAP', soapData);
-  
-  google.script.run
-    .withSuccessHandler(function(result) {
-      debugLog('✅ Nota SOAP salva', result);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('⚠️ Erro ao salvar nota SOAP', error);
-    })
-    .addSessionNote(soapData);
-}
-
-function closeEncounterAndFinish(encounterId) {
-  debugLog('🔒 Fechando atendimento', encounterId);
-  
-  google.script.run
-    .withSuccessHandler(function(success) {
-      debugLog('✅ Atendimento fechado', success);
-      hideLoading();
-      showSuccess('Atendimento registrado com sucesso!');
-      closeEncounterModal();
-      currentEncounter = null;
-      
-      // Atualiza dashboard
-      loadDashboardStats();
-    })
-    .withFailureHandler(function(error) {
-      debugLog('⚠️ Erro ao fechar atendimento', error);
-      hideLoading();
-      showError('Atendimento salvo, mas erro ao finalizar: ' + (error.message || error));
-      closeEncounterModal();
-    })
-    .closeEncounter(encounterId);
-}
-
-// ============================================================================
-// PROFISSIONAIS
-// ============================================================================
-
-function loadProfessionalsForEncounter() {
-  var select = document.getElementById('encounter-professional');
-  if (!select) return;
-  
-  debugLog('👥 Carregando profissionais...');
-  select.innerHTML = '<option value="">Carregando profissionais...</option>';
-
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      debugLog('✅ Profissionais recebidos', resp);
-      
-      var list = (resp && resp.data) ? resp.data : [];
-      if (!Array.isArray(list) || list.length === 0) {
-        select.innerHTML = '<option value="">Nenhum profissional encontrado</option>';
-        return;
-      }
-      
-      var html = '<option value="">Selecione o profissional...</option>';
-      list.forEach(function(p) {
-        var label = (p.full_name || p.email || p.id || '').toString();
-        var crefito = p.crefito ? (' - CREFITO: ' + p.crefito) : '';
-        html += '<option value="' + p.id + '">' + escapeHtml(label) + crefito + '</option>';
-      });
-      select.innerHTML = html;
-      
-      debugLog('✅ ' + list.length + ' profissionais carregados no select');
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao carregar profissionais', error);
-      select.innerHTML = '<option value="">Erro ao carregar profissionais</option>';
-      showError('Erro ao carregar profissionais: ' + (error.message || error));
-    })
-    .handleApiGet({ path: '/api/professionals' });
-}
-
-/**
- * [MERGE] Modal rápido de cadastro de profissional que existia no fonte antigo
- * usado dentro do fluxo de atendimento
- */
-function showProfessionalModal() {
-  var m = document.getElementById('professional-modal');
-  if (!m) { createProfessionalModal(); m = document.getElementById('professional-modal'); }
-  var f = document.getElementById('professional-form');
-  if (f) f.reset();
-  m.classList.remove('hidden');
-}
-
-function closeProfessionalModal() {
-  var m = document.getElementById('professional-modal');
-  if (m) m.classList.add('hidden');
-}
-
-function createProfessionalModal() {
-  var html = `
-    <div id="professional-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4">
-        <div class="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
-          <h3 class="text-xl font-bold">Cadastrar Profissional</h3>
-          <button onclick="closeProfessionalModal()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        <form id="professional-form" class="p-6 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo <span class="text-red-500">*</span></label>
-            <input type="text" id="prof_full_name" required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nome do profissional" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email <span class="text-red-500">*</span></label>
-            <input type="email" id="prof_email" required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="email@exemplo.com" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">CREFITO</label>
-            <input type="text" id="prof_crefito" class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Opcional" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Função <span class="text-red-500">*</span></label>
-            <select id="prof_role" required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option value="FISIO">FISIO</option>
-              <option value="COORD">COORD</option>
-            </select>
-          </div>
-          <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button type="button" onclick="closeProfessionalModal()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancelar</button>
-            <button type="submit" class="btn-primary px-6 py-2"><i class="fas fa-save mr-2"></i>Salvar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-  var w = document.createElement('div');
-  w.innerHTML = html;
-  document.body.appendChild(w);
-  var f = document.getElementById('professional-form');
-  if (f) f.addEventListener('submit', handleProfessionalSubmit);
-}
-
-function handleProfessionalSubmit(e) {
-  e.preventDefault();
-  var data = {
-    full_name: document.getElementById('prof_full_name').value.trim(),
-    email: document.getElementById('prof_email').value.trim(),
-    crefito: document.getElementById('prof_crefito').value.trim(),
-    role: document.getElementById('prof_role').value,
-    status: 'ACTIVE'
-  };
-  if (!data.full_name || !data.email || !data.role) {
-    showError('Preencha os campos obrigatórios');
-    return;
-  }
-  showLoading();
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      hideLoading();
-      if (resp && resp.success && resp.data && resp.data.id) {
-        showSuccess('Profissional cadastrado com sucesso!');
-        closeProfessionalModal();
-        loadProfessionalsForEncounter();
-        var sel = document.getElementById('encounter-professional');
-        if (sel) sel.value = resp.data.id;
-      } else {
-        showError('Erro ao cadastrar profissional');
-      }
-    })
-    .withFailureHandler(function(error) {
-      hideLoading();
-      showError('Erro ao cadastrar profissional: ' + (error.message || error));
-    })
-    .handleApiPost('/api/professionals', data);
-}
-
-/**
- * Modal dashboard mais completo (do fonte novo)
- */
+function closeEncounterDetailsModal(){ var m=document.getElementById('encounter-details-modal'); if(m) m.classList.add('hidden'); }
+</script>
+<script>
+// ==================== Overrides: Profissional (dashboard) ====================
 function showProfessionalModalFromDashboard() {
-  debugLog('👨‍⚕️ Abrindo modal de cadastro de profissional (dashboard)');
-  
   var modal = document.getElementById('professional-modal-dashboard');
-  if (!modal) {
-    createProfessionalModalDashboard();
-    modal = document.getElementById('professional-modal-dashboard');
-  }
-  
-  var form = document.getElementById('professional-form-dashboard');
-  if (form) form.reset();
-  
+  if (!modal) { createProfessionalModalDashboard(); modal = document.getElementById('professional-modal-dashboard'); }
+  var form = document.getElementById('professional-form-dashboard'); if (form) form.reset();
   modal.classList.remove('hidden');
 }
+function closeProfessionalModalDashboard(){ var m=document.getElementById('professional-modal-dashboard'); if(m) m.classList.add('hidden'); }
+function createProfessionalModalDashboard(){ var html="\
+  <div id=\"professional-modal-dashboard\" class=\"hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50\">\
+    <div class=\"bg-white rounded-lg shadow-xl max-w-xl w-full mx-4\">\
+      <div class=\"bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center\">\
+        <h3 class=\"text-xl font-bold\"><i class=\"fas fa-user-md mr-2\"></i>Cadastrar Profissional</h3>\
+        <button onclick=\"closeProfessionalModalDashboard()\" class=\"text-white hover:text-gray-200\"><i class=\"fas fa-times text-xl\"></i></button>\
+      </div>\
+      <form id=\"professional-form-dashboard\" class=\"p-6 space-y-4\">\
+        <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">Nome Completo <span class=\"text-red-500\">*</span></label><input type=\"text\" id=\"prof_full_name_dash\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"Nome do profissional\"/></div>\
+        <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">Email <span class=\"text-red-500\">*</span></label><input type=\"email\" id=\"prof_email_dash\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"email@exemplo.com\"/></div>\
+        <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">CREFITO</label><input type=\"text\" id=\"prof_crefito_dash\" class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\" placeholder=\"Opcional\"/></div>\
+        <div><label class=\"block text-sm font-medium text-gray-700 mb-1\">Função <span class=\"text-red-500\">*</span></label><select id=\"prof_role_dash\" required class=\"form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500\"><option value=\"\">Selecione...</option><option value=\"FISIO\">Fisioterapeuta</option><option value=\"COORD\">Coordenador</option></select></div>\
+        <div class=\"flex justify-end space-x-3 pt-4 border-t\"><button type=\"button\" onclick=\"closeProfessionalModalDashboard()\" class=\"px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50\">Cancelar</button><button type=\"submit\" class=\"btn-primary px-6 py-2\"><i class=\"fas fa-save mr-2\"></i>Cadastrar</button></div>\
+      </form>\
+    </div>\
+  </div>"; var w=document.createElement('div'); w.innerHTML=html; document.body.appendChild(w); var f=document.getElementById('professional-form-dashboard'); if(f) f.addEventListener('submit', handleProfessionalSubmitDashboard); }
+function handleProfessionalSubmitDashboard(e){ e.preventDefault(); var data={ full_name:document.getElementById('prof_full_name_dash').value.trim(), email:document.getElementById('prof_email_dash').value.trim(), crefito:document.getElementById('prof_crefito_dash').value.trim(), role:document.getElementById('prof_role_dash').value, status:'ACTIVE' }; if(!data.full_name||!data.email||!data.role){ showError('Preencha todos os campos obrigatórios'); return; } showLoading(); google.script.run.withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.success&&resp.data&&resp.data.id){ showSuccess('Profissional cadastrado com sucesso!'); closeProfessionalModalDashboard(); } else showError('Erro ao cadastrar profissional'); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao cadastrar profissional: '+(err.message||err)); }).handleApiPost('/api/professionals', data); }
 
-function closeProfessionalModalDashboard() {
-  var modal = document.getElementById('professional-modal-dashboard');
-  if (modal) modal.classList.add('hidden');
-}
-
-function createProfessionalModalDashboard() {
-  var html = `
-    <div id="professional-modal-dashboard" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4">
-        <div class="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center">
-          <h3 class="text-xl font-bold">
-            <i class="fas fa-user-md mr-2"></i>Cadastrar Profissional
-          </h3>
-          <button onclick="closeProfessionalModalDashboard()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <form id="professional-form-dashboard" class="p-6 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Nome Completo <span class="text-red-500">*</span>
-            </label>
-            <input type="text" id="prof_full_name_dash" required 
-                   class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                   placeholder="Nome do profissional" />
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Email <span class="text-red-500">*</span>
-            </label>
-            <input type="email" id="prof_email_dash" required 
-                   class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                   placeholder="email@exemplo.com" />
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              CREFITO
-            </label>
-            <input type="text" id="prof_crefito_dash" 
-                   class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                   placeholder="Opcional - Ex: CREFITO-1/12345-F" />
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              Função <span class="text-red-500">*</span>
-            </label>
-            <select id="prof_role_dash" required 
-                    class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option value="">Selecione...</option>
-              <option value="FISIO">Fisioterapeuta</option>
-              <option value="COORD">Coordenador</option>
-            </select>
-          </div>
-          
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p class="text-sm text-blue-800">
-              <i class="fas fa-info-circle mr-2"></i>
-              O profissional será cadastrado como <strong>ATIVO</strong> e poderá ser selecionado nos atendimentos.
-            </p>
-          </div>
-          
-          <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button type="button" onclick="closeProfessionalModalDashboard()" 
-                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-              Cancelar
-            </button>
-            <button type="submit" 
-                    class="btn-primary px-6 py-2">
-              <i class="fas fa-save mr-2"></i>Cadastrar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-  
-  var wrapper = document.createElement('div');
-  wrapper.innerHTML = html;
-  document.body.appendChild(wrapper);
-  
-  var form = document.getElementById('professional-form-dashboard');
-  if (form) form.addEventListener('submit', handleProfessionalSubmitDashboard);
-}
-
-function handleProfessionalSubmitDashboard(e) {
-  e.preventDefault();
-  
-  var data = {
-    full_name: document.getElementById('prof_full_name_dash').value.trim(),
-    email: document.getElementById('prof_email_dash').value.trim(),
-    crefito: document.getElementById('prof_crefito_dash').value.trim(),
-    role: document.getElementById('prof_role_dash').value,
-    status: 'ACTIVE'
-  };
-  
-  if (!data.full_name || !data.email || !data.role) {
-    showError('Preencha todos os campos obrigatórios');
-    return;
-  }
-  
-  debugLog('💾 Cadastrando profissional...', data);
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      hideLoading();
-      debugLog('✅ Profissional cadastrado', resp);
-      
-      if (resp && resp.success && resp.data && resp.data.id) {
-        showSuccess('Profissional cadastrado com sucesso!');
-        closeProfessionalModalDashboard();
-      } else {
-        showError('Erro ao cadastrar profissional');
-      }
-    })
-    .withFailureHandler(function(error) {
-      hideLoading();
-      debugLog('❌ Erro ao cadastrar profissional', error);
-      showError('Erro ao cadastrar profissional: ' + (error.message || error));
-    })
-    .handleApiPost('/api/professionals', data);
-}
-
-// ============================================================================
-// ATENDIMENTOS - LISTAGEM, DETALHES, FALLBACK
-// ============================================================================
-
-function loadEncounters() {
-  debugLog('📋 Carregando aba de atendimentos');
-  loadEncountersTab(); // Popula o filtro de pacientes
-}
-
-/**
- * Carrega opções de pacientes no filtro
- */
-function loadEncountersTab() {
-  debugLog('📋 Carregando aba de atendimentos');
-  
-  var selectEl = document.getElementById('encounter-patient-filter');
-  if (!selectEl) {
-    debugLog('⚠️ Select de filtro não encontrado');
-    return;
-  }
-  
-  // Verifica se há pacientes carregados
-  debugLog('📦 Pacientes disponíveis: ' + INITIAL_PATIENTS.length);
-  
-  // Usa pacientes do cache
-  if (INITIAL_PATIENTS.length === 0) {
-    debugLog('⚠️ Nenhum paciente no cache, tentando recarregar...');
-    
-    // Tenta carregar pacientes do servidor
-    google.script.run
-      .withSuccessHandler(function(patients) {
-        debugLog('✅ Pacientes carregados do servidor: ' + patients.length);
-        INITIAL_PATIENTS = patients || [];
-        populatePatientSelect();
-      })
-      .withFailureHandler(function(error) {
-        debugLog('❌ Erro ao carregar pacientes', error);
-        selectEl.innerHTML = '<option value="">Erro ao carregar pacientes</option>';
-      })
-      .getFrontendPatients();
-    
-    return;
-  }
-  
-  populatePatientSelect();
-}
-
-/**
- * Popula o select com pacientes
- */
-function populatePatientSelect() {
-  var selectEl = document.getElementById('encounter-patient-filter');
-  if (!selectEl) return;
-  
-  var html = '<option value="">Selecione um paciente...</option>';
-  
-  INITIAL_PATIENTS.forEach(function(p) {
-    var age = calculateAge(p.birth_date);
-    var cpf = p.document_id ? String(p.document_id) : 'Sem CPF';
-    
-    html += '<option value="' + p.id + '">' + 
-            escapeHtml(p.full_name) + ' - ' + age + ' anos - CPF: ' + 
-            escapeHtml(cpf) + '</option>';
-  });
-  
-  selectEl.innerHTML = html;
-  debugLog('✅ Select populado com ' + INITIAL_PATIENTS.length + ' pacientes');
-}
-
-/**
- * Busca os atendimentos de um paciente selecionado
- */
-function loadPatientEncounters() {
-  var selectEl = document.getElementById('encounter-patient-filter');
-  var patientId = selectEl ? selectEl.value : '';
-  
-  debugLog('🔍 Filtrando atendimentos do paciente: ' + patientId);
-  
-  var listEl = document.getElementById('encounters-list');
-  if (!listEl) {
-    debugLog('⚠️ Container encounters-list não encontrado');
-    return;
-  }
-  
-  if (!patientId) {
-    listEl.innerHTML = `
-      <div class="text-center py-12 text-gray-400">
-        <i class="fas fa-filter text-6xl mb-4"></i>
-        <p class="text-lg">Nenhum paciente selecionado</p>
-        <p class="text-sm">Use o filtro acima para buscar atendimentos</p>
-      </div>
-    `;
-    return;
-  }
-  
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(response) {
-      debugLog('✅ Atendimentos recebidos', response);
-      hideLoading();
-      
-      if (!response || !response.data) {
-        showError('Erro ao carregar atendimentos');
-        return;
-      }
-      
-      renderEncountersList(response.data, patientId);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao carregar atendimentos', error);
-      hideLoading();
-      showError('Erro ao buscar atendimentos: ' + (error.message || error));
-    })
-    .handleApiGet({ path: '/api/encounters/patient', patient_id: patientId });
-}
-
-/**
- * Renderiza lista de atendimentos
- * [MERGE] versão nova + cache local ENCOUNTERS_CACHE_BY_ID do antigo
- */
-function renderEncountersList(encounters, patientId) {
-  var listEl = document.getElementById('encounters-list');
-  
-  if (!encounters || encounters.length === 0) {
-    listEl.innerHTML = `
-      <div class="text-center py-12 text-gray-400">
-        <i class="fas fa-clipboard text-6xl mb-4"></i>
-        <p class="text-lg">Nenhum atendimento encontrado</p>
-        <p class="text-sm">Este paciente ainda não possui atendimentos registrados</p>
-      </div>
-    `;
-    return;
-  }
-  
-  debugLog('🎨 Renderizando ' + encounters.length + ' atendimentos');
-  
-  var html = '<div class="space-y-4">';
-  
-  encounters.forEach(function(enc) {
-    // [MERGE] guarda no cache local para fallback de detalhes depois
-    try { window.ENCOUNTERS_CACHE_BY_ID[enc.id] = enc; } catch (e) {}
-    
-    var statusBadge = enc.status === 'OPEN' 
-      ? '<span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Em Andamento</span>'
-      : '<span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Finalizado</span>';
-    
-    var startDate = formatDateTime(enc.started_at);
-    var endDate = enc.ended_at ? formatDateTime(enc.ended_at) : '-';
-    
-    html += `
-      <div class="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <h3 class="font-bold text-lg text-gray-800">
-              <i class="fas fa-stethoscope text-blue-600 mr-2"></i>${escapeHtml(enc.type)}
-            </h3>
-            <p class="text-sm text-gray-600">
-              <i class="fas fa-user-md mr-1"></i>${escapeHtml(enc.professional_name)} 
-              ${enc.professional_crefito ? '(CREFITO: ' + escapeHtml(enc.professional_crefito) + ')' : ''}
-            </p>
-          </div>
-          ${statusBadge}
-        </div>
-        
-        <div class="grid grid-cols-2 gap-3 text-sm mb-3">
-          <div>
-            <span class="text-gray-500">Início:</span>
-            <span class="font-medium ml-1">${startDate}</span>
-          </div>
-          <div>
-            <span class="text-gray-500">Fim:</span>
-            <span class="font-medium ml-1">${endDate}</span>
-          </div>
-          <div>
-            <span class="text-gray-500">Local:</span>
-            <span class="font-medium ml-1">${escapeHtml(enc.location)}</span>
-          </div>
-        </div>
-        
-        <div class="flex flex-wrap gap-2 text-xs mb-3">
-          ${enc.notes && enc.notes.length > 0 ? 
-            '<span class="bg-blue-50 text-blue-700 px-2 py-1 rounded"><i class="fas fa-file-medical mr-1"></i>' + enc.notes.length + ' nota(s) SOAP</span>' : ''}
-          ${enc.vitals && enc.vitals.length > 0 ? 
-            '<span class="bg-red-50 text-red-700 px-2 py-1 rounded"><i class="fas fa-heartbeat mr-1"></i>' + enc.vitals.length + ' sinais vitais</span>' : ''}
-          ${enc.assessments && enc.assessments.length > 0 ? 
-            '<span class="bg-green-50 text-green-700 px-2 py-1 rounded"><i class="fas fa-clipboard-check mr-1"></i>' + enc.assessments.length + ' avaliação(ões)</span>' : ''}
-        </div>
-        
-        <div class="flex gap-2 pt-3 border-t">
-          <button onclick="viewEncounterDetails('${enc.id}')" 
-                  class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200">
-            <i class="fas fa-eye mr-1"></i>Ver Detalhes
-          </button>
-        </div>
-      </div>
-    `;
-  });
-  
-  html += '</div>';
-  
-  listEl.innerHTML = html;
-  debugLog('✅ Lista renderizada');
-}
-
-/**
- * Limpa filtro de paciente
- */
-function clearEncounterFilter() {
-  var selectEl = document.getElementById('encounter-patient-filter');
-  if (selectEl) {
-    selectEl.value = '';
-  }
-  
-  var listEl = document.getElementById('encounters-list');
-  if (listEl) {
-    listEl.innerHTML = `
-      <div class="text-center py-12 text-gray-400">
-        <i class="fas fa-filter text-6xl mb-4"></i>
-        <p class="text-lg">Nenhum paciente selecionado</p>
-        <p class="text-sm">Use o filtro acima para buscar atendimentos</p>
-      </div>
-    `;
-  }
-}
-
-/**
- * Formata data/hora para exibição
- */
-function formatDateTime(isoString) {
-  if (!isoString) return '-';
-  
-  try {
-    var date = new Date(isoString);
-    var day = ('0' + date.getDate()).slice(-2);
-    var month = ('0' + (date.getMonth() + 1)).slice(-2);
-    var year = date.getFullYear();
-    var hours = ('0' + date.getHours()).slice(-2);
-    var minutes = ('0' + date.getMinutes()).slice(-2);
-    
-    return day + '/' + month + '/' + year + ' ' + hours + ':' + minutes;
-  } catch (e) {
-    return '-';
-  }
-}
-
-// ============================================================================
-// DETALHES DO ATENDIMENTO (MODAL DE LEITURA)
-// ============================================================================
-
-/**
- * Visualiza detalhes completos do atendimento
- * Usa múltiplas tentativas e fallback local
- */
-function viewEncounterDetails(encounterId) {
-  debugLog('👁️ Visualizando atendimento: ' + encounterId);
-  debugLog('Encounter ID recebido: ' + encounterId);
-  debugLog('Tipo do ID: ' + typeof encounterId);
-  
-  showLoading();
-  
-  // TENTATIVA 1: Via handleApiGet
-  google.script.run
-    .withSuccessHandler(function(response) {
-      debugLog('✅ Resposta handleApiGet recebida', response);
-      debugLog('Tipo da resposta: ' + typeof response);
-      debugLog('Response é null?: ' + (response === null));
-      debugLog('Response é undefined?: ' + (response === undefined));
-      
-      if (response) {
-        debugLog('Response.success: ' + response.success);
-        debugLog('Response.data existe?: ' + (response.data !== undefined));
-        debugLog('Response.error: ' + response.error);
-      }
-      
-      hideLoading();
-      
-      if (!response) {
-        debugLog('⚠️ Resposta vazia, tentando método alternativo...');
-        tryDirectMethod(encounterId);
-        return;
-      }
-      
-      if (response.error) {
-        debugLog('⚠️ Erro na resposta: ' + response.error);
-        // TENTATIVA 1b: reenviar usando encounter_id
-        debugLog('⚠️ Tentando novamente com encounter_id...');
-        tryWithEncounterId(encounterId);
-        return; 
-      }
-      
-      var data = response.data;
-      
-      if (!data) {
-        debugLog('⚠️ response.data vazio, tentando método alternativo...');
-        tryDirectMethod(encounterId);
-        return;
-      }
-      
-      debugLog('✅ Dados válidos recebidos, exibindo modal...');
-      debugLog('Data.encounter existe?: ' + (data.encounter !== undefined));
-      debugLog('Data.patient existe?: ' + (data.patient !== undefined));
-      
-      showEncounterDetailsModal(data);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Falha no handleApiGet', error);
-      hideLoading();
-      
-      debugLog('⚠️ Tentando método alternativo...');
-      tryDirectMethod(encounterId);
-    })
-    .handleApiGet({ path: '/api/encounters/details', id: encounterId });
-}
-
-// TENTATIVA 1b: Repetir chamada passando encounter_id ao invés de id
-function tryWithEncounterId(encounterId) {
-  showLoading();
-  google.script.run
-    .withSuccessHandler(function(response) {
-      debugLog('✅ Resposta com encounter_id recebida', response);
-      hideLoading();
-      if (response && response.data) {
-        showEncounterDetailsModal(response.data);
-        return;
-      }
-      // Segue para método direto
-      tryDirectMethod(encounterId);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Falha com encounter_id', error);
-      hideLoading();
-      tryDirectMethod(encounterId);
-    })
-    .handleApiGet({ path: '/api/encounters/details', encounter_id: encounterId });
-}
-
-/**
- * MÉTODO ALTERNATIVO: Chama getEncounterDetails diretamente
- */
-function tryDirectMethod(encounterId) {
-  debugLog('🔄 Tentando método direto: getEncounterDetails');
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(details) {
-      debugLog('✅ Resposta método direto recebida', details);
-      hideLoading();
-      
-      if (!details) {
-        debugLog('⚠️ Método direto retornou vazio; tentando fallback local...');
-        tryLocalFallback(encounterId);
-        return;
-      }
-      
-      showEncounterDetailsModal(details);
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Falha no método direto', error);
-      hideLoading();
-      // Última tentativa: Fallback local
-      tryLocalFallback(encounterId);
-    })
-    .getEncounterDetails(encounterId);
-}
-
-// Fallback local: usa dados já renderizados em ENCOUNTERS_CACHE_BY_ID para exibir algo útil
-function tryLocalFallback(encounterId) {
-  try {
-    var enc = (window.ENCOUNTERS_CACHE_BY_ID || {})[encounterId];
-    if (!enc) {
-      showError('Atendimento não encontrado');
-      return;
-    }
-    // tenta recuperar paciente do cache
-    var patient = null;
-    try {
-      var pid = enc.patient_id;
-      patient = (INITIAL_PATIENTS || []).find(function(p){ return p.id === pid; }) || {};
-    } catch (e) { patient = {}; }
-    var data = {
-      encounter: {
-        id: enc.id,
-        patient_id: enc.patient_id,
-        started_at: enc.started_at,
-        ended_at: enc.ended_at,
-        location: enc.location,
-        type: enc.type
-      },
-      patient: patient,
-      professional: { full_name: enc.professional_name || 'N/A', crefito: enc.professional_crefito || '' },
-      notes: enc.notes || [],
-      vitals: enc.vitals || [],
-      assessments: enc.assessments || [],
-      procedures: enc.procedures || []
-    };
-    showEncounterDetailsModal(data);
-  } catch (e) {
-    showError('Erro ao exibir detalhes: ' + (e && e.message ? e.message : e));
-  }
-}
-
-/**
- * [MERGE] Abaixo: toda a estrutura de modal de detalhes do atendimento
- * que existia completa no fonte antigo e não estava no novo.
- */
-
-function showEncounterDetailsModal(data) {
-  debugLog('📋 showEncounterDetailsModal chamada', data);
-  debugLog('Data recebido - tipo: ' + typeof data);
-  debugLog('Data.encounter existe?: ' + (data && data.encounter !== undefined));
-  
-  var modal = document.getElementById('encounter-details-modal');
-  
-  if (!modal) {
-    debugLog('⚠️ Modal não encontrado, criando...');
-    createEncounterDetailsModal();
-    modal = document.getElementById('encounter-details-modal');
-  }
-  
-  if (!modal) {
-    debugLog('❌ ERRO: Não foi possível criar o modal');
-    showError('Erro ao criar modal de detalhes');
-    return;
-  }
-  
-  debugLog('✅ Modal encontrado, preenchendo detalhes...');
-  
-  // Preenche informações
-  fillEncounterDetails(data);
-  
-  debugLog('✅ Detalhes preenchidos, exibindo modal...');
-  modal.classList.remove('hidden');
-  
-  debugLog('✅ Modal exibido com sucesso');
-}
-
-function createEncounterDetailsModal() {
-  var modalHtml = `
-    <div id="encounter-details-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto">
-        <div class="bg-blue-600 text-white px-6 py-4 rounded-t-lg flex justify-between items-center sticky top-0 z-10">
-          <div>
-            <h3 class="text-xl font-bold">Detalhes do Atendimento</h3>
-            <p id="encounter-detail-subtitle" class="text-sm text-blue-100"></p>
-          </div>
-          <button onclick="closeEncounterDetailsModal()" class="text-white hover:text-gray-200">
-            <i class="fas fa-times text-xl"></i>
-          </button>
-        </div>
-        
-        <div id="encounter-detail-content" class="p-6">
-          <!-- Conteúdo será preenchido dinamicamente -->
-        </div>
-      </div>
-    </div>
-  `;
-  
-  var div = document.createElement('div');
-  div.innerHTML = modalHtml;
-  document.body.appendChild(div);
-}
-
-function fillEncounterDetails(data) {
-  debugLog('📋 fillEncounterDetails chamada');
-  debugLog('Data tipo: ' + typeof data);
-  debugLog('Data é null?: ' + (data === null));
-  debugLog('Data é undefined?: ' + (data === undefined));
-  
-  if (data) {
-    debugLog('Data.encounter: ' + (data.encounter ? 'EXISTS' : 'NULL'));
-    debugLog('Data.patient: ' + (data.patient ? 'EXISTS' : 'NULL'));
-    debugLog('Data.professional: ' + (data.professional ? 'EXISTS' : 'NULL'));
-  }
-  
-  var subtitleEl = document.getElementById('encounter-detail-subtitle');
-  var contentEl = document.getElementById('encounter-detail-content');
-  
-  debugLog('subtitleEl encontrado?: ' + (subtitleEl !== null));
-  debugLog('contentEl encontrado?: ' + (contentEl !== null));
-  
-  if (!data || !data.encounter) {
-    debugLog('❌ Dados inválidos ou encounter ausente');
-    if (contentEl) {
-      contentEl.innerHTML = '<p class="text-red-500 text-center py-8">Erro ao carregar detalhes do atendimento</p>';
-    }
-    return;
-  }
-  
-  debugLog('✅ Dados válidos, montando HTML...');
-  
-  var enc = data.encounter;
-  var patient = data.patient || {};
-  var professional = data.professional || {};
-  var notes = data.notes || [];
-  var vitals = data.vitals || [];
-  var assessments = data.assessments || [];
-  var procedures = data.procedures || [];
-  
-  // Subtítulo com informações básicas
-  if (subtitleEl) {
-    subtitleEl.textContent = (patient.full_name || 'Paciente') + ' • ' + formatDateTime(enc.started_at);
-  }
-  
-  var html = '';
-  
-  // 1. INFORMAÇÕES DO ATENDIMENTO
-  html += '<div class="mb-6 border-b pb-4">';
-  html += '  <h4 class="text-lg font-bold mb-3 text-gray-700">';
-  html += '    <i class="fas fa-info-circle mr-2 text-blue-600"></i>Informações do Atendimento';
-  html += '  </h4>';
-  html += '  <div class="grid grid-cols-2 gap-4 text-sm">';
-  html += '    <div><span class="text-gray-500">Profissional:</span> <span class="font-medium">' + escapeHtml(professional.full_name || 'N/A') + '</span></div>';
-  html += '    <div><span class="text-gray-500">CREFITO:</span> <span class="font-medium">' + escapeHtml(professional.crefito || '-') + '</span></div>';
-  html += '    <div><span class="text-gray-500">Local:</span> <span class="font-medium">' + escapeHtml(enc.location || '-') + '</span></div>';
-  html += '    <div><span class="text-gray-500">Tipo:</span> <span class="font-medium">' + escapeHtml(enc.type || '-') + '</span></div>';
-  html += '    <div><span class="text-gray-500">Início:</span> <span class="font-medium">' + formatDateTime(enc.started_at) + '</span></div>';
-  html += '    <div><span class="text-gray-500">Fim:</span> <span class="font-medium">' + (enc.ended_at ? formatDateTime(enc.ended_at) : 'Em andamento') + '</span></div>';
-  html += '  </div>';
-  html += '</div>';
-  
-  // 2. SINAIS VITAIS
-  if (vitals.length > 0) {
-    html += '<div class="mb-6 border-b pb-4">';
-    html += '  <h4 class="text-lg font-bold mb-3 text-gray-700">';
-    html += '    <i class="fas fa-heartbeat mr-2 text-red-600"></i>Sinais Vitais';
-    html += '  </h4>';
-    
-    vitals.forEach(function(v) {
-      html += '<div class="bg-gray-50 p-3 rounded mb-2">';
-      html += '  <p class="text-xs text-gray-500 mb-2">' + formatDateTime(v.recorded_at) + '</p>';
-      html += '  <div class="grid grid-cols-3 md:grid-cols-6 gap-3 text-sm">';
-      
-      if (v.spo2) html += '<div><span class="text-gray-600">SpO₂:</span> <span class="font-bold">' + v.spo2 + '%</span></div>';
-      if (v.hr) html += '<div><span class="text-gray-600">FC:</span> <span class="font-bold">' + v.hr + ' bpm</span></div>';
-      if (v.rr) html += '<div><span class="text-gray-600">FR:</span> <span class="font-bold">' + v.rr + ' ipm</span></div>';
-      if (v.bp_sys && v.bp_dia) html += '<div><span class="text-gray-600">PA:</span> <span class="font-bold">' + v.bp_sys + '/' + v.bp_dia + ' mmHg</span></div>';
-      if (v.temp) html += '<div><span class="text-gray-600">Temp:</span> <span class="font-bold">' + v.temp + '°C</span></div>';
-      
-      html += '  </div>';
-      html += '</div>';
-    });
-    
-    html += '</div>';
-  }
-  
-  // 3. NOTAS SOAP
-  if (notes.length > 0) {
-    html += '<div class="mb-6 border-b pb-4">';
-    html += '  <h4 class="text-lg font-bold mb-3 text-gray-700">';
-    html += '    <i class="fas fa-file-medical mr-2 text-green-600"></i>Evolução SOAP';
-    html += '  </h4>';
-    
-    notes.forEach(function(n) {
-      html += '<div class="bg-gray-50 p-4 rounded mb-3">';
-      html += '  <p class="text-xs text-gray-500 mb-3">' + formatDateTime(n.recorded_at) + '</p>';
-      
-      if (n.subjective) {
-        html += '<div class="mb-3">';
-        html += '  <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs font-bold mr-2">S</span>';
-        html += '  <span class="text-sm text-gray-700">' + escapeHtml(n.subjective) + '</span>';
-        html += '</div>';
-      }
-      
-      if (n.objective) {
-        html += '<div class="mb-3">';
-        html += '  <span class="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs font-bold mr-2">O</span>';
-        html += '  <span class="text-sm text-gray-700">' + escapeHtml(n.objective) + '</span>';
-        html += '</div>';
-      }
-      
-      if (n.assessment) {
-        html += '<div class="mb-3">';
-        html += '  <span class="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded text-xs font-bold mr-2">A</span>';
-        html += '  <span class="text-sm text-gray-700">' + escapeHtml(n.assessment) + '</span>';
-        html += '</div>';
-      }
-      
-      if (n.plan) {
-        html += '<div>';
-        html += '  <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs font-bold mr-2">P</span>';
-        html += '  <span class="text-sm text-gray-700">' + escapeHtml(n.plan) + '</span>';
-        html += '</div>';
-      }
-      
-      html += '</div>';
-    });
-    
-    html += '</div>';
-  }
-  
-  // 4. AVALIAÇÕES
-  if (assessments.length > 0) {
-    html += '<div class="mb-6 border-b pb-4">';
-    html += '  <h4 class="text-lg font-bold mb-3 text-gray-700">';
-    html += '    <i class="fas fa-clipboard-check mr-2 text-purple-600"></i>Avaliações';
-    html += '  </h4>';
-    
-    assessments.forEach(function(a) {
-      html += '<div class="bg-gray-50 p-3 rounded mb-2">';
-      html += '  <div class="flex justify-between items-start mb-2">';
-      html += '    <span class="font-bold text-gray-700">' + escapeHtml(a.tool) + '</span>';
-      html += '    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-bold">Score: ' + (a.score || 0) + '</span>';
-      html += '  </div>';
-      html += '  <p class="text-xs text-gray-500">' + formatDateTime(a.recorded_at) + '</p>';
-      html += '</div>';
-    });
-    
-    html += '</div>';
-  }
-  
-  // 5. PROCEDIMENTOS
-  if (procedures.length > 0) {
-    html += '<div class="mb-6">';
-    html += '  <h4 class="text-lg font-bold mb-3 text-gray-700">';
-    html += '    <i class="fas fa-tasks mr-2 text-orange-600"></i>Procedimentos';
-    html += '  </h4>';
-    
-    procedures.forEach(function(p) {
-      html += '<div class="bg-gray-50 p-3 rounded mb-2">';
-      html += '  <div class="flex justify-between items-start">';
-      html += '    <div>';
-      html += '      <span class="font-medium text-gray-700">' + escapeHtml(p.description || 'Sem descrição') + '</span>';
-      html += '      <p class="text-xs text-gray-500 mt-1">' + formatDateTime(p.recorded_at) + '</p>';
-      html += '    </div>';
-      if (p.code) {
-        html += '    <span class="text-xs bg-gray-200 px-2 py-1 rounded">' + escapeHtml(p.code) + '</span>';
-      }
-      html += '  </div>';
-      html += '</div>';
-    });
-    
-    html += '</div>';
-  }
-  
-  // Sem dados clínicos
-  if (vitals.length === 0 && notes.length === 0 && assessments.length === 0 && procedures.length === 0) {
-    html += '<div class="text-center py-8 text-gray-400">';
-    html += '  <i class="fas fa-inbox text-6xl mb-4"></i>';
-    html += '  <p class="text-lg">Nenhum dado clínico registrado</p>';
-    html += '  <p class="text-sm">Este atendimento não possui sinais vitais, notas SOAP, avaliações ou procedimentos</p>';
-    html += '</div>';
-  }
-  
-  contentEl.innerHTML = html;
-  debugLog('✅ Detalhes renderizados');
-}
-
-function closeEncounterDetailsModal() {
-  var modal = document.getElementById('encounter-details-modal');
-  if (modal) modal.classList.add('hidden');
-}
-
-// ============================================================================
-// FUNÇÕES AUXILIARES GERAIS
-// ============================================================================
-
-function calculateAge(birthDate) {
-  if (!birthDate) return '-';
-  try {
-    var today = new Date();
-    var birth = new Date(birthDate);
-    var age = today.getFullYear() - birth.getFullYear();
-    var md = today.getMonth() - birth.getMonth();
-    if (md < 0 || (md === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    return isNaN(age) ? '-' : age;
-  } catch (e) {
-    return '-';
-  }
-}
-
-function escapeHtml(text) {
-  if (!text && text !== 0) return '';
-  var map = {\n    '#/dashboard': 'dashboard',\n    '#/pacientes': 'patients',\n    '#/atendimentos': 'encounters',\n    '#/relatorios': 'reports'\n  };
-  return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
-}
-
-function showLoading() {
-  var el = document.getElementById('loading');
-  if (el) el.classList.remove('hidden');
-}
-
-function hideLoading() {
-  var el = document.getElementById('loading');
-  if (el) el.classList.add('hidden');
-}
-
-function showSuccess(message) {
-  console.log('[SUCCESS]', message);
-  var alert = '<div class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in">' +
-    '<i class="fas fa-check-circle mr-2"></i>' + escapeHtml(message) +
-    '</div>';
-  var el = document.createElement('div');
-  el.innerHTML = alert;
-  document.body.appendChild(el);
-  setTimeout(function() {
-    el.remove();
-  }, 3000);
-}
-
-function showError(message) {
-  console.error('[ERROR]', message);
-  hideLoading();
-  
-  var alert = '<div class="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in">' +
-    '<i class="fas fa-exclamation-circle mr-2"></i>' + escapeHtml(message) +
-    '</div>';
-  var alertEl = document.createElement('div');
-  alertEl.innerHTML = alert;
-  document.body.appendChild(alertEl);
-  setTimeout(function() {
-    alertEl.remove();
-  }, 5000);
-}
-
-console.log('✅ Sistema carregado completamente');
-/**
- * ============================================================================
- * RELATÓRIOS - Frontend JavaScript
- * Funções para gerar e exibir Ficha de Avaliação
- * ============================================================================
- */
-
-/**
- * ✅ NOVA FUNÇÃO: Gera Ficha de Avaliação em nova janela
- */
-function generateFichaAvaliacao(params) {
-  debugLog('📋 Gerando Ficha de Avaliação...', params);
-  
-  showLoading();
-  
-  // Busca dados completos do paciente
-  google.script.run
-    .withSuccessHandler(function(data) {
-      debugLog('✅ Dados recebidos para ficha', data);
-      hideLoading();
-      
-      if (!data || !data.patient) {
-        showError('Erro ao carregar dados do paciente');
-        return;
-      }
-      
-      // Abre ficha em nova janela
-      openFichaAvaliacaoWindow(data);
-      
-      showSuccess('Ficha de Avaliação gerada com sucesso!');
-    })
-    .withFailureHandler(function(error) {
-      debugLog('❌ Erro ao gerar ficha', error);
-      hideLoading();
-      showError('Erro ao gerar ficha: ' + (error.message || error));
-    })
-    .generateReportData(params);
-}
-
-/**
- * ✅ Abre janela com a Ficha de Avaliação preenchida
- */
-function openFichaAvaliacaoWindow(data) {
-  debugLog('🪟 Abrindo janela da ficha...');
-  
-  // Template HTML da ficha (inline)
-  var fichaHTML = buildFichaAvaliacaoHTML(data);
-  
-  // Abre em nova janela
-  var fichaWindow = window.open('', '_blank', 'width=900,height=800');
-  
-  if (!fichaWindow) {
-    showError('Popup bloqueado! Permita popups para este site.');
-    return;
-  }
-  
-  fichaWindow.document.write(fichaHTML);
-  fichaWindow.document.close();
-  
-  debugLog('✅ Janela da ficha aberta');
-}
-
-/**
- * ✅ Constrói HTML completo da Ficha de Avaliação
- */
-function buildFichaAvaliacaoHTML(data) {
-  var patient = data.patient;
-  var encounters = data.encounters || [];
-  var lastEncounter = encounters[0] || {};
-  var notes = lastEncounter.notes || [];
-  var vitals = lastEncounter.vitals || [];
-  var lastNote = notes[0] || {};
-  var lastVital = vitals[0] || {};
-  
-  // Processa dados
-  var idade = calculateAge(patient.birth_date);
-  var sexo = patient.sex === 'M' ? 'Masculino' : 'Feminino';
-  var cpf = formatCPF(patient.document_id || '');
-  var dataAvaliacao = lastEncounter.started_at ? formatDateBR(lastEncounter.started_at) : '__/__/____';
-  
-  // Alergias e condições
-  var alergias = formatAllergies(patient.allergies_json);
-  var condicoes = formatConditions(patient.conditions_json);
-  
-  // Profissional
-  var fisioterapeutaNome = lastEncounter.professional_name || '';
-  var fisioterapeutaCrefito = lastEncounter.professional_crefito || '';
-  
-  // Peso e altura
-  var peso = lastVital.weight ? lastVital.weight + ' kg' : '___ kg';
-  var altura = lastVital.height ? lastVital.height + ' cm' : '___ cm';
-  
-  // Notas SOAP
-  var queixaPrincipal = escapeHtml(lastNote.subjective || '');
-  var historicoAtual = escapeHtml(lastNote.objective || '');
-  var diagnostico = escapeHtml(lastNote.assessment || '');
-  
-  // Monta HTML completo
-  var html = `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ficha de Avaliação - ${escapeHtml(patient.full_name)}</title>
-  <style>
-    @page { size: A4; margin: 1.5cm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: Arial, sans-serif;
-      font-size: 11pt;
-      line-height: 1.4;
-      color: #000;
-      padding: 20px;
-    }
-    .header {
-      text-align: center;
-      border: 2px solid #000;
-      padding: 12px;
-      margin-bottom: 20px;
-      background: #f9f9f9;
-    }
-    .header h1 {
-      font-size: 18pt;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-    .section {
-      border: 2px solid #000;
-      margin-bottom: 15px;
-      page-break-inside: avoid;
-    }
-    .section-header {
-      background: #e0e0e0;
-      padding: 6px 10px;
-      font-weight: bold;
-      border-bottom: 2px solid #000;
-    }
-    .section-content { padding: 10px; }
-    .info-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 5px;
-    }
-    .info-table td {
-      border: 1px solid #666;
-      padding: 4px 6px;
-      vertical-align: top;
-    }
-    .info-table .label {
-      font-weight: bold;
-      background: #f5f5f5;
-      width: 140px;
-    }
-    .text-field {
-      border: 1px solid #666;
-      min-height: 80px;
-      padding: 6px;
-      margin-top: 8px;
-      white-space: pre-wrap;
-    }
-    .text-field.small { min-height: 40px; }
-    .field-label {
-      font-weight: bold;
-      margin-top: 12px;
-      margin-bottom: 4px;
-      display: block;
-    }
-    .signature-area {
-      margin-top: 40px;
-      text-align: center;
-    }
-    .signature-line {
-      border-top: 1px solid #000;
-      width: 350px;
-      margin: 0 auto;
-      padding-top: 6px;
-    }
-    .action-buttons {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      display: flex;
-      gap: 10px;
-      z-index: 1000;
-    }
-    .btn {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    .btn-print { background: #3b82f6; color: white; }
-    .btn-close { background: #6b7280; color: white; }
-    @media print {
-      .action-buttons { display: none !important; }
-      body { padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <!-- Botões -->
-  <div class="action-buttons">
-    <button onclick="window.print()" class="btn btn-print">🖨️ Imprimir</button>
-    <button onclick="window.close()" class="btn btn-close">✖ Fechar</button>
-  </div>
-
-  <!-- Cabeçalho -->
-  <div class="header">
-    <h1>FICHA DE AVALIAÇÃO</h1>
-  </div>
-
-  <!-- Dados Pessoais -->
-  <div class="section">
-    <div class="section-header">
-      Dados Pessoais do Paciente:
-      <span style="float: right;">Data da Avaliação: ${dataAvaliacao}</span>
-    </div>
-    <div class="section-content">
-      <table class="info-table">
-        <tr>
-          <td class="label">Nome:</td>
-          <td colspan="3">${escapeHtml(patient.full_name)}</td>
-        </tr>
-        <tr>
-          <td class="label">Idade:</td>
-          <td>${idade} anos</td>
-          <td class="label">Sexo:</td>
-          <td>${sexo}</td>
-        </tr>
-        <tr>
-          <td class="label">Profissão:</td>
-          <td>___________________</td>
-          <td class="label">Hobbies:</td>
-          <td>___________________</td>
-        </tr>
-        <tr>
-          <td class="label">Peso:</td>
-          <td>${peso}</td>
-          <td class="label">Altura:</td>
-          <td>${altura}</td>
-        </tr>
-        <tr>
-          <td class="label">Estado Civil:</td>
-          <td>___________________</td>
-          <td class="label">CPF:</td>
-          <td>${cpf}</td>
-        </tr>
-        <tr>
-          <td class="label">Endereço:</td>
-          <td colspan="3">_________________________________________________</td>
-        </tr>
-        <tr>
-          <td class="label">Telefone:</td>
-          <td>___________________</td>
-          <td class="label">CEP:</td>
-          <td>___________________</td>
-        </tr>
-        <tr>
-          <td class="label">Fisioterapeuta:</td>
-          <td colspan="3">${escapeHtml(fisioterapeutaNome)}</td>
-        </tr>
-        <tr>
-          <td class="label">CREFITO:</td>
-          <td colspan="3">${escapeHtml(fisioterapeutaCrefito)}</td>
-        </tr>
-      </table>
-    </div>
-  </div>
-
-  <!-- Diagnóstico Clínico -->
-  <div class="section">
-    <div class="section-header">Diagnóstico Clínico:</div>
-    <div class="section-content">
-      <div class="text-field small">${diagnostico}</div>
-    </div>
-  </div>
-
-  <!-- Anamnese -->
-  <div class="section">
-    <div class="section-header">Anamnese:</div>
-    <div class="section-content">
-      <span class="field-label">Queixa Principal:</span>
-      <div class="text-field">${queixaPrincipal}</div>
-      
-      <span class="field-label">Histórico da Doença Atual:</span>
-      <div class="text-field">${historicoAtual}</div>
-      
-      <span class="field-label">Histórico da Doença Pregressa:</span>
-      <div class="text-field"></div>
-      
-      <span class="field-label">Doenças Associadas:</span>
-      <div class="text-field">${condicoes}</div>
-      
-      <span class="field-label">Hábitos de Vida:</span>
-      <div class="text-field"></div>
-      
-      <span class="field-label">Histórico Familiar:</span>
-      <div class="text-field"></div>
-      
-      <span class="field-label">Medicações em uso:</span>
-      <div class="text-field"></div>
-    </div>
-  </div>
-
-  <!-- Condições Pessoais -->
-  <div class="section">
-    <div class="section-header">Condições Pessoais</div>
-    <div class="section-content">
-      <span class="field-label">Alergias:</span>
-      <div class="text-field small">${alergias}</div>
-    </div>
-  </div>
-
-  <!-- Assinatura -->
-  <div class="signature-area">
-    <div class="signature-line">
-      <div style="margin-bottom: 5px;">_________________________________</div>
-      <strong>Fisioterapeuta Responsável</strong><br>
-      ${escapeHtml(fisioterapeutaNome)}<br>
-      CREFITO: ${escapeHtml(fisioterapeutaCrefito)}
-    </div>
-    <div style="margin-top: 20px; font-size: 10pt;">
-      Data: ${dataAvaliacao}
-    </div>
-  </div>
-</body>
-</html>
-  `;
-  
-  return html;
-}
-
-/**
- * Helper: Formata alergias
- */
-function formatAllergies(jsonStr) {
-  try {
-    var allergies = JSON.parse(jsonStr || '[]');
-    return Array.isArray(allergies) && allergies.length > 0 
-      ? escapeHtml(allergies.join(', '))
-      : 'Nenhuma alergia registrada';
-  } catch (e) {
-    return 'Nenhuma alergia registrada';
-  }
-}
-
-/**
- * Helper: Formata condições
- */
-function formatConditions(jsonStr) {
-  try {
-    var conditions = JSON.parse(jsonStr || '[]');
-    return Array.isArray(conditions) && conditions.length > 0 
-      ? escapeHtml(conditions.join(', '))
-      : 'Nenhuma condição registrada';
-  } catch (e) {
-    return 'Nenhuma condição registrada';
-  }
-}
-
-/**
- * Helper: Formata CPF
- */
-function formatCPF(cpf) {
-  if (!cpf) return '';
-  var numeros = String(cpf).replace(/\D/g, '');
-  return numeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
-
-/**
- * ✅ ATUALIZA: Função handleReportGeneration
- * Adicione esta modificação na função existente
- */
-function handleReportGenerationUpdated(e) {
-  e.preventDefault();
-  
-  var patientId = document.getElementById('report-patient-select').value;
-  var reportType = document.getElementById('report-type').value;
-  // Formato único: Google Docs (sem impressão direta)
-  var format = 'docs';
-  
-  if (!patientId) {
-    showError('Selecione um paciente');
-    return;
-  }
-  
-  var params = {
-    patient_id: patientId,
-    type: reportType,
-    format: format
-  };
-  
-  // Adiciona período se for evolução
-  if (reportType === 'evolucao') {
-    params.date_start = document.getElementById('report-date-start').value;
-    params.date_end = document.getElementById('report-date-end').value;
-  }
-  
-  debugLog('📄 Gerando relatório...', params);
-  
-  // Geração única: abre no Google Docs
-  generatePDFReportUpdated(params);
-}
-
-/**
- * ✅ Gera PDF via Google Docs
- */
-function generatePDFReportUpdated(params) {
-  showLoading();
-  
-  google.script.run
-    .withSuccessHandler(function(result) {
-      hideLoading();
-      
-      if (result && result.success && result.url) {
-        showSuccess('Documento gerado no Google Docs!');
-        
-        // Abre o Google Docs em nova aba
-        window.open(result.url, '_blank');
-        
-        // Adiciona ao histórico
-        addReportToHistory({
-          name: result.file_name,
-          url: result.url,
-          date: new Date().toISOString()
-        });
-      } else {
-        showError('Erro ao gerar documento');
-      }
-    })
-    .withFailureHandler(function(error) {
-      hideLoading();
-      showError('Erro ao gerar documento: ' + (error.message || error));
-    })
-    .generateDocsReport(params);
-}
-
-/**
- * ✅ Adiciona relatório ao histórico visual
- */
-function addReportToHistory(report) {
-  var historyEl = document.getElementById('reports-history');
-  if (!historyEl) return;
-  
-  var html = `
-    <div class="bg-white border rounded p-3 flex justify-between items-center">
-      <div>
-        <p class="font-medium text-gray-800">${escapeHtml(report.name)}</p>
-        <p class="text-xs text-gray-500">${formatDateTimeBR(report.date)}</p>
-      </div>
-      <a href="${report.url}" target="_blank" 
-         class="text-blue-600 hover:text-blue-800 text-sm">
-        <i class="fas fa-external-link-alt mr-1"></i>Abrir
-      </a>
-    </div>
-  `;
-  
-  // Remove mensagem de "nenhum relatório"
-  if (historyEl.querySelector('p.italic')) {
-    historyEl.innerHTML = '';
-  }
-  
-  // Adiciona no topo
-  historyEl.insertAdjacentHTML('afterbegin', html);
-}
-
-/**
- * Helper: Formata data/hora BR
- */
-function formatDateTimeBR(isoDate) {
-  if (!isoDate) return '';
-  
-  try {
-    var date = new Date(isoDate);
-    var day = ('0' + date.getDate()).slice(-2);
-    var month = ('0' + (date.getMonth() + 1)).slice(-2);
-    var year = date.getFullYear();
-    var hours = ('0' + date.getHours()).slice(-2);
-    var minutes = ('0' + date.getMinutes()).slice(-2);
-    
-    return `${day}/${month}/${year} às ${hours}:${minutes}`;
-  } catch (e) {
-    return '';
-  }
-}
-
-console.log('✅ Módulo de Ficha de Avaliação carregado');
+// ==================== Overrides: Status do paciente ====================
+function changePatientStatus(id){ var p=(INITIAL_PATIENTS||[]).find(function(x){return x.id===id;}); if(!p){ showError('Paciente não encontrado'); return; } var html='\
+  <div id=\"status-change-modal\" class=\"fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50\">\
+    <div class=\"bg-white rounded-lg shadow-xl max-w-md w-full mx-4\">\
+      <div class=\"bg-purple-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center\"><h3 class=\"text-lg font-bold\">Alterar Status do Paciente</h3><button onclick=\"closeStatusChangeModal()\" class=\"text-white hover:text-gray-200\"><i class=\"fas fa-times\"></i></button></div>\
+      <form id=\"status-change-form\" class=\"p-6 space-y-4\">\
+        <input type=\"hidden\" id=\"status-patient-id\" value=\"'+id+'\"/>\
+        <div><label class=\"block text-sm font-medium text-gray-700 mb-2\">Novo Status</label><select id=\"new-status\" class=\"form-input w-full px-3 py-2 border rounded-lg\"><option value=\"ACTIVE\">Ativo</option><option value=\"INACTIVE\">Inativo</option><option value=\"DISCHARGED\">Alta</option><option value=\"TRANSFERRED\">Transferido</option><option value=\"DECEASED\">Falecido</option></select></div>\
+        <div class=\"flex justify-end space-x-3 pt-2\"><button type=\"button\" onclick=\"closeStatusChangeModal()\" class=\"px-4 py-2 border rounded\">Cancelar</button><button type=\"submit\" class=\"btn-primary px-4 py-2\">Confirmar</button></div>\
+      </form>\
+    </div>\
+  </div>'; var d=document.createElement('div'); d.id='status-change-wrapper'; d.innerHTML=html; document.body.appendChild(d); document.getElementById('new-status').value=p.status||'ACTIVE'; document.getElementById('status-change-form').addEventListener('submit', handleStatusChange); }
+function closeStatusChangeModal(){ var w=document.getElementById('status-change-wrapper'); if(w) w.remove(); }
+function handleStatusChange(e){ e.preventDefault(); var id=document.getElementById('status-patient-id').value, st=document.getElementById('new-status').value; showLoading(); google.script.run.withSuccessHandler(function(ok){ hideLoading(); if(ok){ var p=(INITIAL_PATIENTS||[]).find(function(x){return x.id===id;}); if(p) p.status=st; showSuccess('Status atualizado'); closeStatusChangeModal(); loadPatients(); } else showError('Erro ao atualizar status'); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao atualizar status: '+(err.message||err)); }).updatePatient(id,{status:st}); }
 </script>
 <script>
-// ============================================================================
-// RELATÓRIOS - Integração do cartão e formulário
-// Adiciona handlers ausentes: selectReportType, cancelReportSelection,
-// carregamento de pacientes e binding do submit do formulário
-// ============================================================================
+// ==================== Agenda (semana + criação) ====================
+var AGENDA_STATE = { startOfWeek: null, events: [] };
 
-var currentReportType = null;
+function __startOfWeek(d){ var x=new Date(d.getFullYear(), d.getMonth(), d.getDate()); var day=x.getDay(); var diff=(day===0?-6:1)-day; x.setDate(x.getDate()+diff); x.setHours(0,0,0,0); return x; }
+function __endOfWeek(monday){ var x=new Date(monday); x.setDate(x.getDate()+6); x.setHours(23,59,59,999); return x; }
 
-function selectReportType(type) {
-  try {
-    currentReportType = type;
+function loadAgendaTab(){ if(!AGENDA_STATE.startOfWeek){ AGENDA_STATE.startOfWeek=__startOfWeek(new Date()); } fetchAgendaAndRender(); }
+function agendaPrevWeek(){ AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOfWeek.getDate()-7); fetchAgendaAndRender(); }
+function agendaNextWeek(){ AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOfWeek.getDate()+7); fetchAgendaAndRender(); }
+function agendaToday(){ AGENDA_STATE.startOfWeek=__startOfWeek(new Date()); fetchAgendaAndRender(); }
 
-    var container = document.getElementById('report-form-container');
-    if (container) container.classList.remove('hidden');
-
-    var typeInput = document.getElementById('report-type');
-    if (typeInput) typeInput.value = type;
-
-    loadPatientsForReport();
-
-    var periodContainer = document.getElementById('report-period-container');
-    if (periodContainer) {
-      if (type === 'evolucao') {
-        periodContainer.classList.remove('hidden');
-        setDefaultDates();
-      } else {
-        periodContainer.classList.add('hidden');
-      }
-    }
-
-    if (container && container.scrollIntoView) {
-      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  } catch (e) {
-    console.error('Erro em selectReportType:', e);
-  }
-}
-
-function cancelReportSelection() {
-  try {
-    var container = document.getElementById('report-form-container');
-    if (container) container.classList.add('hidden');
-    var form = document.getElementById('report-generation-form');
-    if (form) form.reset();
-    currentReportType = null;
-  } catch (e) {
-    console.error('Erro em cancelReportSelection:', e);
-  }
-}
-
-function loadPatientsForReport() {
-  var select = document.getElementById('report-patient-select');
-  if (!select) return;
-
-  select.innerHTML = '<option value="">Carregando pacientes...</option>';
-
-  if (Array.isArray(INITIAL_PATIENTS) && INITIAL_PATIENTS.length > 0) {
-    populateReportPatientSelect(INITIAL_PATIENTS);
-    return;
-  }
-
-  if (typeof google === 'undefined' || !google.script || !google.script.run) {
-    select.innerHTML = '<option value="">google.script.run indisponível</option>';
-    return;
-  }
-
+function fetchAgendaAndRender(){ var start=AGENDA_STATE.startOfWeek; var end=__endOfWeek(start); var rangeEl=document.getElementById('agenda-range'); if(rangeEl){ var fmt=function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); }; rangeEl.textContent = fmt(start)+' - '+fmt(end); }
+  showLoading();
   google.script.run
-    .withSuccessHandler(function(patients){
-      populateReportPatientSelect(patients || []);
-    })
-    .withFailureHandler(function(err){
-      console.error('Erro ao carregar pacientes:', err);
-      select.innerHTML = '<option value="">Erro ao carregar pacientes</option>';
-    })
-    .getFrontendPatients();
+    .withSuccessHandler(function(resp){ hideLoading(); var ev=(resp&&resp.data)||[]; AGENDA_STATE.events = Array.isArray(ev)?ev:[]; renderAgendaWeek(); })
+    .withFailureHandler(function(err){ hideLoading(); showError('Erro ao carregar agenda: '+(err&&err.message||err||'')); renderAgendaWeek(); })
+    .handleApiGet({ path: '/api/agenda', start: start.toISOString(), end: end.toISOString() });
 }
 
-function populateReportPatientSelect(patients) {
-  var select = document.getElementById('report-patient-select');
-  if (!select) return;
 
-  var html = '<option value="">Selecione um paciente...</option>';
-  patients.forEach(function(p){
-    var age = calculateAge(p.birth_date);
-    var cpf = p.document_id ? ' - CPF: ' + p.document_id : '';
-    html += '<option value="' + p.id + '">' + escapeHtml(p.full_name) + ' (' + age + ' anos)' + cpf + '</option>';
-  });
-  select.innerHTML = html;
+function ensurePatientsLoaded(next){ if(Array.isArray(INITIAL_PATIENTS) && INITIAL_PATIENTS.length){ try{ return next(); }catch(_){} return; } showLoading(); google.script.run.withSuccessHandler(function(p){ hideLoading(); INITIAL_PATIENTS = Array.isArray(p)?p:[]; try{ next(); }catch(_){} }).withFailureHandler(function(){ hideLoading(); try{ next(); }catch(_){} }).getFrontendPatients(); }
+
+function renderAppointmentModal(slotISO){ var w=document.createElement('div'); var startVal = slotISO || new Date().toISOString().slice(0,16); var endVal=(function(){ var d=new Date(startVal); d.setHours(d.getHours()+1); return d.toISOString().slice(0,16); })(); w.id='agenda-modal-wrapper'; w.innerHTML=''
+  +'<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">'
+  +  '<div class="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4">'
+  +    '<div class="bg-blue-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center">'
+  +      '<h3 class="text-lg font-bold"><i class="fas fa-calendar-plus mr-2"></i>Novo Agendamento</h3>'
+  +      '<button onclick="closeAgendaModal()" class="text-white hover:text-gray-200"><i class="fas fa-times"></i></button>'
+  +    '</div>'
+  +    '<form id="agenda-form" class="p-6 space-y-4">'
+  +      '<div><label class="block text-sm font-medium text-gray-700 mb-1">Paciente</label><select id="agenda-patient" class="form-input w-full px-3 py-2 border rounded-lg"><option value="">Selecione...</option>'
+  +        + (INITIAL_PATIENTS||[]).map(function(p){ return '<option value="'+p.id+'">'+escapeHtml(p.full_name)+'</option>'; }).join('')
+  +      + '</select></div>'
+  +      '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">'
+  +        '<div><label class="block text-sm font-medium text-gray-700 mb-1">Início</label><input id="agenda-start" type="datetime-local" value="'+startVal.slice(0,16)+'" class="form-input w-full px-3 py-2 border rounded-lg"></div>'
+  +        '<div><label class="block text-sm font-medium text-gray-700 mb-1">Fim</label><input id="agenda-end" type="datetime-local" value="'+endVal.slice(0,16)+'" class="form-input w-full px-3 py-2 border rounded-lg"></div>'
+  +      '</div>'
+  +      '<div><label class="block text-sm font-medium text-gray-700 mb-1">Título</label><input id="agenda-title" type="text" class="form-input w-full px-3 py-2 border rounded-lg" placeholder="Sessão de fisioterapia"></div>'
+  +      '<div class="flex justify-end gap-2 pt-4 border-t">'
+  +        '<button type="button" onclick="closeAgendaModal()" class="px-4 py-2 border rounded">Cancelar</button>'
+  +        '<button type="submit" class="btn-primary px-6 py-2"><i class="fas fa-save mr-2"></i>Salvar</button>'
+  +      '</div>'
+  +    '</form>'
+  +  '</div>'
+  +'</div>';
+  document.body.appendChild(w);
+  var f=document.getElementById('agenda-form'); if(f){ f.addEventListener('submit', handleAgendaSubmit); }
+}
+function renderAgendaWeek(){ var container=document.getElementById('agenda-calendar'); if(!container) return; var monday=AGENDA_STATE.startOfWeek; var days=[]; for(var i=0;i<7;i++){ var d=new Date(monday); d.setDate(monday.getDate()+i); d.setHours(0,0,0,0); days.push(d); }
+  var hours=[]; for(var h=8;h<=18;h++) hours.push(h);
+  var weekDays=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  var html=''; html+='<div class="grid grid-cols-8 gap-2">'; html+='<div></div>'; for(var k=0;k<7;k++){ html+='<div class="text-center font-semibold">'+weekDays[k]+' '+('0'+days[k].getDate()).slice(-2)+'</div>'; } html+='</div>';
+  hours.forEach(function(hh){ html+='<div class="grid grid-cols-8 gap-2 items-stretch">'; html+='<div class="text-right pr-2 text-sm text-gray-500">'+('0'+hh).slice(-2)+':00</div>'; for(var c=0;c<7;c++){ var cellDate=new Date(days[c]); cellDate.setHours(hh,0,0,0); var iso = cellDate.toISOString(); var cellEvents = (AGENDA_STATE.events||[]).filter(function(ev){ try{ var es=new Date(ev.start); return es.getFullYear()==cellDate.getFullYear() && es.getMonth()==cellDate.getMonth() && es.getDate()==cellDate.getDate() && es.getHours()==cellDate.getHours(); }catch(_){ return false; } }); var pills = cellEvents.map(function(ev){ var t=escapeHtml(ev.title||'Sessão'); return '<div class="text-xs bg-blue-100 text-blue-800 rounded px-1 py-0.5 truncate">'+t+'</div>'; }).join(''); html+='<div class="bg-white border rounded p-2 h-16 hover:bg-blue-50 cursor-pointer" data-slot="'+iso+'" onclick="openNewAppointmentModal(this.getAttribute(\'data-slot\'))">'+pills+'</div>'; } html+='</div>'; });
+  container.innerHTML=html;
 }
 
-function setDefaultDates() {
-  var today = new Date();
-  var thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(today.getDate() - 30);
-  var startInput = document.getElementById('report-date-start');
-  var endInput = document.getElementById('report-date-end');
-  if (startInput) startInput.value = formatDateForInput(thirtyDaysAgo);
-  if (endInput) endInput.value = formatDateForInput(today);
-}
+function openNewAppointmentModal(slotISO){ ensurePatientsLoaded(function(){ renderAppointmentModalImproved(slotISO); }); }
+function closeAgendaModal(){ var w=document.getElementById('agenda-modal-wrapper'); if(w) w.remove(); }
 
-function formatDateForInput(date) {
-  var y = date.getFullYear();
-  var m = ('0' + (date.getMonth() + 1)).slice(-2);
-  var d = ('0' + date.getDate()).slice(-2);
-  return y + '-' + m + '-' + d;
+function handleAgendaSubmit(e){ e.preventDefault(); var pid=document.getElementById('agenda-patient').value; var title=document.getElementById('agenda-title').value.trim(); var start=document.getElementById('agenda-start').value; var end=document.getElementById('agenda-end').value; if(!pid||!start||!end){ showError('Preencha paciente, Início e fim'); return; } showLoading();
+  google.script.run
+    .withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.success){ showSuccess('Agendamento salvo'); closeAgendaModal(); fetchAgendaAndRender(); } else { showError('Falha ao salvar agendamento'); } })
+    .withFailureHandler(function(err){ hideLoading(); showError('Erro ao salvar agendamento: '+(err&&err.message||err||'')); })
+    .handleApiPost('/api/agenda', { patient_id: pid, title: title, start: start, end: end });
 }
-
-document.addEventListener('DOMContentLoaded', function(){
-  var form = document.getElementById('report-generation-form');
-  if (form) {
-    // Usa a função atualizada que decide entre impressão e PDF
-    form.addEventListener('submit', handleReportGenerationUpdated);
-  }
-});
 </script>
+
+
 <script>
-// =============================================================================
-// Navegação lateral (router por hash) + Drawer base
-// =============================================================================
-
-(function initShell() {
-  document.addEventListener('DOMContentLoaded', function() {
-    // Sidebar links → navegação por hash
-    var items = document.querySelectorAll('#sidebar [data-route]');
-    for (var i=0;i<items.length;i++){\n    var it = items[i];\n    if (it.getAttribute('data-route') === hash) { it.classList.add('is-active'); } else { it.classList.remove('is-active'); }\n  }\n  // Atualiza título
-  var title = document.getElementById('page-title');
-  if (title){
-    var titles = {dashboard:'Dashboard',patients:'Pacientes',encounters:'Atendimentos',reports:'Relatórios'};
-    title.textContent = titles[tab] || 'Fisio System';
-  }
-}
-
-function openSidebarMobile(){
-  var overlay = document.getElementById('sidebar-overlay');
-  var aside = document.getElementById('sidebar');
-  if (overlay) overlay.classList.remove('hidden');
-  if (aside) aside.classList.remove('hidden');
-}
-function closeSidebarMobile(){
-  var overlay = document.getElementById('sidebar-overlay');
-  var aside = document.getElementById('sidebar');
-  if (overlay) overlay.classList.add('hidden');
-  if (aside && window.innerWidth < 1024) aside.classList.add('hidden');
-}
-
-// Drawer base reutilizável
-function openDrawer(opts){
-  var el = document.getElementById('drawer');
-  if (!el) return;
-  document.getElementById('drawer-title').textContent = (opts && opts.title) || '';
-  document.getElementById('drawer-body').innerHTML = (opts && opts.bodyHtml) || '';
-  var primary = document.getElementById('drawer-primary');
-  if (primary){
-    primary.onclick = function(){ if (opts && typeof opts.onPrimary === 'function') opts.onPrimary(); };
-    primary.textContent = (opts && opts.primaryText) || 'Confirmar';
-  }
-  el.classList.remove('hidden');
-}
-function closeDrawer(){
-  var el = document.getElementById('drawer');
-  if (el) el.classList.add('hidden');
+function renderAppointmentModalImproved(slotISO){
+  function fmtLocal(dt){ var p=function(n){return ('0'+n).slice(-2)}; return dt.getFullYear()+'-'+p(dt.getMonth()+1)+'-'+p(dt.getDate())+'T'+p(dt.getHours())+':'+p(dt.getMinutes()); }
+  var startDate = slotISO ? new Date(slotISO) : new Date();
+  var endDate = new Date(startDate.getTime() + 60*60000);
+  var startVal = fmtLocal(startDate);
+  var endVal = fmtLocal(endDate);
+  var w=document.createElement('div');
+  w.id='agenda-modal-wrapper';
+  w.innerHTML=''
+    +'<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">'
+    +  '<div class="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4">'
+    +    '<div class="bg-blue-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center">'
+    +      '<h3 class="text-lg font-bold"><i class="fas fa-calendar-plus mr-2"></i>Novo Agendamento</h3>'
+    +      '<button onclick="closeAgendaModal()" class="text-white hover:text-gray-200"><i class="fas fa-times"></i></button>'
+    +    '</div>'
+    +    '<form id="agenda-form" class="p-6 space-y-5">'
+    +      '<div>'
+    +        '<label class="block text-sm font-medium text-gray-700 mb-1">Paciente <span class="text-red-500">*</span></label>'
+    +        '<select id="agenda-patient" required autofocus class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"><option value="">Selecione...</option>'
+    +           (INITIAL_PATIENTS||[]).map(function(p){ return '<option value="'+p.id+'">'+escapeHtml(p.full_name)+' ('+calculateAge(p.birth_date)+' anos)</option>'; }).join('')
+    +        + '</select>'
+    +      '</div>'
+    +      '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">'
+    +        '<div>'
+    +          '<label class="block text-sm font-medium text-gray-700 mb-1">Início <span class="text-red-500">*</span></label>'
+    +          '<input id="agenda-start" type="datetime-local" value="'+startVal+'" min="'+fmtLocal(new Date())+'" class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">'
+    +        '</div>'
+    +        '<div>'
+    +          '<label class="block text-sm font-medium text-gray-700 mb-1">Fim <span class="text-red-500">*</span></label>'
+    +          '<input id="agenda-end" type="datetime-local" value="'+endVal+'" min="'+startVal+'" class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">'
+    +        '</div>'
+    +      '</div>'
+    +      '<div>'
+    +        '<label class="block text-sm font-medium text-gray-700 mb-1">Título</label>'
+    +        '<input id="agenda-title" type="text" class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Sessão de fisioterapia">'
+    +      '</div>'
+    +      '<div class="flex justify-end gap-2 pt-4 border-t">'
+    +        '<button type="button" onclick="closeAgendaModal()" class="px-4 py-2 border rounded hover:bg-gray-50">Cancelar</button>'
+    +        '<button type="submit" class="btn-primary px-6 py-2"><i class="fas fa-save mr-2"></i>Salvar</button>'
+    +      '</div>'
+    +    '</form>'
+    +  '</div>'
+    +'</div>';
+  document.body.appendChild(w);
+  var f=document.getElementById('agenda-form'); if(f){ f.addEventListener('submit', handleAgendaSubmit); }
+  var sel=document.getElementById('agenda-patient'); var title=document.getElementById('agenda-title'); var endEl=document.getElementById('agenda-end'); var startEl=document.getElementById('agenda-start');
+  if(sel){ sel.addEventListener('change', function(){ if(title && !title.value){ var opt=sel.options[sel.selectedIndex]; if(opt){ title.value = 'Sessão com '+opt.text.replace(/\s*\(.*\)$/, ''); } } }); }
+  if(startEl && endEl){ startEl.addEventListener('change', function(){ try{ var s=new Date(startEl.value); var e=new Date(s.getTime()+60*60000); endEl.value = (function(d){ var p=function(n){return ('0'+n).slice(-2)}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); })(e); endEl.min = startEl.value; }catch(_){} }); }
 }
 </script>
-
-
 
 

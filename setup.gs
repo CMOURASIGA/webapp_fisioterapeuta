@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * setup.gs - Configuração e Inicialização do Sistema
  * ============================================================================
@@ -44,8 +44,7 @@ function createAllSheetsFor(ss) {
   var sheets = [
     'Patients', 'Contacts', 'Professionals', 'Encounters', 'SessionNotes',
     'Vitals', 'Assessments', 'Procedures', 'Goals', 'CarePlans',
-    'Attachments', 'Consents', 'ACL', 'AuditLog', 'AssessmentTemplates'
-  ];
+    'Attachments', 'Consents', 'ACL', 'AuditLog', 'AssessmentTemplates','Agenda'];
   
   sheets.forEach(function(sheetName) {
     var sheet = ss.getSheetByName(sheetName);
@@ -75,7 +74,8 @@ function setupSheetHeaders(sheet, sheetName) {
     'Consents': ['id','patient_id','scope','basis','granted_at','revoked_at','doc_file_id'],
     'ACL': ['email','role','status','created_at'],
     'AuditLog': ['when','who','action','entity','id','payload_hash'],
-    'AssessmentTemplates': ['tool','version','field_key','label','type','options_json','min','max','required']
+    'AssessmentTemplates': ['tool','version','field_key','label','type','options_json','min','max','required'],
+    'Agenda': ['id','patient_id','professional_id','title','start','end','created_by','created_at','calendar_event_id']
   };
   
   if (headers[sheetName]) {
@@ -170,3 +170,4 @@ function registerCurrentUserAsProfessional() {
   
   return registerProfessional(email, name, '');
 }
+

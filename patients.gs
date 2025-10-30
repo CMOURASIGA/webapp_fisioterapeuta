@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * patients.gs - Lógica de Gerenciamento de Pacientes
  * ATUALIZADO: Suporte completo a status em português

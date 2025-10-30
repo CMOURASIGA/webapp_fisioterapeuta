@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * report.gs - Geração de Relatórios COMPLETA
  * VERSÃO ATUALIZADA com suporte a Ficha de Avaliação
@@ -716,3 +716,4 @@ function generateDocsReport(params) {
     throw error;
   }
 }
+

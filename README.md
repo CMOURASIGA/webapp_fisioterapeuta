@@ -1,90 +1,86 @@
-# Fisio System - Web App (Google Apps Script)
+﻿# Fisio System — Web App (Google Apps Script)
 
-Projeto de prontuário e relatórios em Google Apps Script (HTML Service) para clínicas de fisioterapia. O app oferece cadastro de pacientes, registro de atendimentos (sinais vitais e nota SOAP) e geração de relatórios padronizados diretamente no Google Docs.
+Aplicação de prontuário e relatórios em Google Apps Script (HTML Service) para clínicas de fisioterapia. Oferece cadastro de pacientes, registro de atendimentos (sinais vitais e nota SOAP), geração de documentos no Google Docs e agenda com integração ao Google Calendar.
 
 ## Visão Geral
 
-- Frontend em HTML/CSS/JS servido pelo HTML Service.
-- Backend em Google Apps Script com integração ao Google Drive/Docs.
-- Relatórios gerados diretamente no Google Docs (fluxo "Docs-only"): o documento abre em nova aba para visualizar, imprimir e baixar (PDF, DOCX etc.).
+- Frontend em HTML/CSS/JS (HTML Service) — `index.html` + `index.js.html`.
+- Backend em Google Apps Script (Apps Script) — rotas em `router.gs` e serviços em `*.gs`.
+- Relatórios no fluxo “Docs‑only”: o Google Docs abre em nova aba para visualizar, imprimir e exportar.
+- Agenda semanal integrada ao Calendar (opcional), com criação de eventos no calendário do usuário.
 
 ## Funcionalidades
 
-- Pacientes: cadastro/edição, status e listagem com busca.
-- Atendimentos: abertura, sinais vitais, notas SOAP, encerramento e histórico.
-- Profissionais: cadastro rápido durante o fluxo de atendimento.
-- Relatórios (aba "Relatórios"):
-  - Ficha de Avaliação
-  - Evolução Clínica (comparativos)
+- Pacientes: cadastro/edição, alteração de status, busca por nome/CPF.
+- Atendimentos: abertura, sinais vitais, nota SOAP, encerramento e histórico por paciente.
+- Profissionais: cadastro rápido a partir do fluxo de atendimento.
+- Relatórios (aba “Relatórios”):
+  - Ficha de Avaliação (Google Docs)
+  - Evolução Clínica (comparativos básicos)
   - Relatório de Alta
+- Agenda (aba “Agenda”):
+  - Visualização semanal (Seg–Dom, 8h–18h)
+  - Novo Agendamento com seleção de paciente, início/fim e título
+  - Integração com Google Calendar (cria evento no calendário padrão do usuário)
+
+## Novidades nesta versão
+
+- Correção de pop‑up nos relatórios: pré‑abre a janela e redireciona a URL do Docs (evita bloqueio de pop‑ups).
+- Agenda end‑to‑end (frontend + backend): grade semanal, modal de criação, persistência na planilha e gravação no Google Calendar.
+- Limpeza de encoding (acentos e símbolos corrigidos em todos os arquivos).
+- UX do modal de Agenda: datetime no fuso local, “Fim” auto +1h, título sugerido com nome do paciente.
+- Ajuste de UI: remoção do botão hambúrguer da navbar (não funcional).
 
 ## Estrutura do Projeto
 
-- `index.html` — página principal do Web App (views e abas). Inclui o JS via `<?!= include('index.js'); ?>`.
-- `index.js.html` — JavaScript do frontend (carregamento de dados, UI, atendimentos e geração de relatórios).
-- `report.gs` — backend de relatórios (coleta de dados, montagem de documento Google Docs, helpers).
-- `router.gs`, `code.gs` — endpoints/utilitários (ex.: `getFrontendPatients`, helpers include/rota, permissões).
-- `ficha-avaliacao.html` — template legado de impressão (referência).
+- `index.html` — página principal do Web App (abas Dashboard, Pacientes, Atendimentos, Relatórios, Agenda, Profissionais).
+- `index.js.html` — lógica do frontend (UI, rotas, modais, Agenda e Relatórios).
+- `report.gs` — geração de dados e documentos (Google Docs) para relatórios.
+- `agenda.gs` — endpoints da Agenda (`getAgenda`, `createAgendaEntry`) e integração com Calendar.
+- `router.gs` — roteamento de API (`/api/*`) para frontend (GET/POST via `google.script.run`).
+- `sheets.gs`, `setup.gs` — acesso e preparação das abas do “banco” (Spreadsheet), criação automática da aba `Agenda` quando necessário.
 
 ## Requisitos
 
-- Conta Google com acesso ao Google Drive e Google Docs.
-- Permissões Apps Script: DocumentApp, DriveApp, PropertiesService (se usar storage) e HtmlService.
+- Conta Google com acesso ao Drive/Docs (e Calendar para a Agenda).
+- Apps Script com permissões para: `DocumentApp`, `DriveApp`, `PropertiesService`, `HtmlService`, `CalendarApp` (para Agenda/Calendar).
 - Pop‑ups habilitados para o domínio do Web App (Docs abre em nova aba).
 
 ## Configuração (Apps Script)
 
-1) Crie um projeto Apps Script (standalone).
-2) Copie os arquivos para o editor (mesmos nomes/extensões).
-3) Garanta a função `include(name)` no backend:
+1) Crie um projeto Apps Script (standalone) e copie os arquivos do repositório.
+2) Garanta a função include(name) no backend:
    ```js
-   function include(name) { return HtmlService.createTemplateFromFile(name).getRawContent(); }
+   function include(name) {
+     return HtmlService.createTemplateFromFile(name).getRawContent();
+   }
    ```
-4) Se optar por armazenar PDFs (legado), configure `STORAGE_ROOT_ID`. No fluxo atual (Docs‑only) não é obrigatório.
+3) Execute `ensureSystemInitialized()` (ou acesse o app) para criar a planilha de dados e as abas necessárias.
+4) Para a Agenda/Calendar, publique o Web App com “Executar como: usuário que acessa o app” e autorize os escopos do Calendar.
 
 ## Deploy como Web App
 
 1) Publicar → Implantar como aplicativo da web.
-2) Defina a versão e quem pode acessar (ex.: "Qualquer pessoa com o link").
-3) Use a URL do Web App para acesso (necessário para `google.script.run`).
+2) Defina quem pode acessar e a versão.
+3) Acesse via URL do Web App (necessário para `google.script.run`).
 
 ## Fluxo de Relatórios (Docs‑only)
 
-- Formato único: "Abrir no Google Docs".
-- O backend cria o Doc e retorna a URL para abrir na nova aba.
-- Funções principais (backend):
-  - `generateReportData(params)` — agrega paciente + atendimentos (com filtro de período).
-  - `createReportDocument(data, type)` — roteia para o construtor do tipo.
-  - `buildAvaliacaoDocument(body, data)` — Ficha de Avaliação.
-  - `buildEvolucaoDocument(body, data)` — Evolução Clínica.
-  - `buildAltaDocument(body, data)` — Relatório de Alta.
-  - `generateDocsReport(params)` — retorna `{ success, url, file_id, file_name }`.
+- O backend cria o Google Docs e retorna `{ success, url, file_id, file_name }`.
+- O frontend abre a URL em nova aba (com pré‑abertura para evitar bloqueio de pop‑ups).
 
-## Uso
+## Fluxo da Agenda
 
-1) Aba "Relatórios" → escolha o tipo.
-2) Selecione o paciente (e período para Evolução, se necessário).
-3) Clique em "Gerar Relatório" → abre no Google Docs.
-
-## Dados Utilizados
-
-- Paciente: `full_name`, `birth_date`, `sex`, `document_id`, `conditions_json`, `allergies_json`.
-- Atendimentos: `started_at`, `location`, `type`, `notes[]` (SOAP: `subjective`, `objective`, `assessment`, `plan`, `pain_scale` opcional), `vitals[]` (`spo2`, `hr`, `rr`, `bp_sys`, `bp_dia`, `temp`), `professional_name`, `professional_crefito`, `procedures[]`.
-- Contatos (opcional): `Contacts` vinculados ao paciente; tentativa de detectar médico responsável por `role/relation`.
+- `GET /api/agenda` → retorna eventos do período solicitado.
+- `POST /api/agenda` → cria um registro na aba `Agenda` e tenta inserir o evento no Calendar padrão do usuário.
+- A grade semanal é renderizada no frontend; o modal de criação usa hora local e sugere título com base no paciente.
 
 ## Problemas Comuns
 
-- `google.script.run` indisponível: abra via URL do Web App.
-- Pop‑up bloqueado: permita pop‑ups para abrir o Google Docs.
-- PDF vazio: fluxo atual não exporta PDF automaticamente; salve pelo Docs.
-
-## Roadmap (sugestões)
-
-- Exibir período selecionado dentro do Doc.
-- Campos dedicados para médico/contatos.
-- Tabelas com mais colunas e cabeçalhos de página.
+- `google.script.run` indisponível: acesse pela URL do Web App (não funciona em arquivo local).
+- Pop‑up bloqueado nos relatórios: permita pop‑ups no domínio do Web App.
+- Calendar não sincroniza: verifique escopos/autorizações e se a implantação executa “como o usuário que acessa o app”.
 
 ---
 
 Sinta‑se à vontade para abrir issues/sugestões.
-

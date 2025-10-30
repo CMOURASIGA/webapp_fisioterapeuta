@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <base target="_top">
@@ -15,95 +15,105 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
   <!-- Navbar -->
-  <nav class="bg-brand-emerald text-white shadow-lg">
-    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-      <div class="flex items-center space-x-3">
-        <i class="fas fa-heartbeat text-2xl"></i>
-        <h1 class="text-xl font-bold">Fisio System</h1>
+  <nav class="navbar">
+    <div class="navbar-left">
+      <div class="navbar-logo">
+        <div class="navbar-logo-icon"><i class="fas fa-heartbeat"></i></div>
+        <span>Fisio System</span>
       </div>
-      <div class="flex items-center space-x-4">
-        <button id="btn-open-sidebar" class="btn-secondary lg:hidden">Menu</button>
-        <span id="user-name" class="text-sm"></span>
-        <span id="user-role" class="text-xs bg-brand-green-300 px-2 py-1 rounded"></span>
+    </div>
+    <div class="navbar-search">
+      <i class="fas fa-search"></i>
+      <input type="text" placeholder="Buscar pacientes, atendimentos...">
+    </div>
+    <div class="navbar-right">
+      <button class="btn-secondary btn-notifications"><i class="fas fa-bell"></i><span class="notification-badge">3</span></button>
+      <div class="navbar-user">
+        <div class="navbar-avatar"><span id="user-initials">CM</span></div>
+        <div class="navbar-user-info">
+          <div class="navbar-user-name" id="user-name">cmourasiga@gmail.com</div>
+          <div class="navbar-user-role" id="user-role">ADMIN</div>
+        </div>
       </div>
     </div>
   </nav>
 
   <!-- Sidebar + Overlay -->
-  <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-40" onclick="closeSidebarMobile()"></div>
-  <aside id="sidebar" class="fixed inset-y-0 left-0 w-72 sidebar hidden lg:block z-50">
-    <div class="px-4 py-4 border-b border-brand-gray-20 border-opacity-60">
-      <span class="rail-brand"><i class="fas fa-heartbeat"></i> Fisio System</span>
+  <div id="sidebar-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 z-40"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">MENU PRINCIPAL</div>
+      <nav>
+        <div class="nav-item is-active" data-route="dashboard"><i class="fas fa-th-large"></i><span>Dashboard</span></div>
+        <div class="nav-item" data-route="patients"><i class="fas fa-users"></i><span>Pacientes</span><span class="nav-badge" id="badge-pacientes">3</span></div>
+        <div class="nav-item" data-route="encounters"><i class="fas fa-clipboard-list"></i><span>Atendimentos</span></div>
+        <div class="nav-item" data-route="reports"><i class="fas fa-chart-line"></i><span>Relatórios</span></div>
+      </nav>
     </div>
-    <nav class="p-4 space-y-1" aria-label="Navegação principal">
-      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/pacientes">Pacientes</button>
-      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/atendimentos">Atendimentos</button>
-      <button class="nav-item w-full text-left px-3 py-2 rounded-md" data-route="#/relatorios">Relatórios</button>
-    </nav>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">GESTÃO</div>
+      <nav>
+        <div class="nav-item" data-route="professionals"><i class="fas fa-user-md"></i><span>Profissionais</span></div>
+        <div class="nav-item" data-route="agenda"><i class="fas fa-calendar-alt"></i><span>Agenda</span></div>
+        <div class="nav-item" data-route="settings"><i class="fas fa-cog"></i><span>Configurações</span></div>
+      </nav>
+    </div>
   </aside>
 
   <!-- Container Principal -->
-  <div class="lg:pl-72">
-  <div class="container mx-auto px-4 py-6">
-    <div class="bg-white rounded-lg border border-brand-gray-20 px-4 py-3 mb-4">
-      <h2 id="page-title" class="text-xl font-semibold text-brand-blue-500">Dashboard</h2>
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-title" id="page-title">Dashboard</h1>
+      <p class="page-subtitle" id="page-subtitle">Visão geral do sistema</p>
+      <div class="page-actions" id="page-actions"></div>
     </div>
     <div id="tab-content">
       <!-- Dashboard -->
       <div id="dashboard-tab" class="tab-content">
-        <!-- 3.1 - BOTÃO DE CADASTRO DE PROFISSIONAL -->
-        <div class="mb-6 flex justify-end">
-          <button onclick="showProfessionalModal()" class="btn-primary">
-            <i class="fas fa-user-md mr-2"></i>Cadastrar Profissional
-          </button>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div class="bg-white p-6 rounded-lg shadow">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-gray-500 text-sm">Pacientes Ativos</p>
-                <p class="text-3xl font-bold text-blue-600" id="stat-patients">-</p>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <div class="stat-card-info">
+                <div class="stat-card-label">Pacientes Ativos</div>
+                <div class="stat-card-value" id="stat-patients">-</div>
               </div>
-              <i class="fas fa-users text-4xl text-blue-200"></i>
+              <div class="stat-card-icon blue"><i class="fas fa-users"></i></div>
             </div>
+            <div class="stat-card-footer"><span class="stat-trend up"><i class="fas fa-arrow-up"></i><span id="trend-patients">0%</span></span><span>vs. mês anterior</span></div>
           </div>
-          <div class="bg-white p-6 rounded-lg shadow">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-gray-500 text-sm">Atendimentos Hoje</p>
-                <p class="text-3xl font-bold text-green-600" id="stat-today">0</p>
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <div class="stat-card-info">
+                <div class="stat-card-label">Atendimentos Hoje</div>
+                <div class="stat-card-value" id="stat-today">0</div>
               </div>
-              <i class="fas fa-calendar-check text-4xl text-green-200"></i>
+              <div class="stat-card-icon green"><i class="fas fa-calendar-check"></i></div>
             </div>
+            <div class="stat-card-footer"><span class="stat-trend up"><i class="fas fa-arrow-up"></i><span id="trend-today">0%</span></span><span>vs. semana anterior</span></div>
           </div>
-          <div class="bg-white p-6 rounded-lg shadow">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-gray-500 text-sm">Reavaliações Pendentes</p>
-                <p class="text-3xl font-bold text-orange-600" id="stat-pending">0</p>
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <div class="stat-card-info">
+                <div class="stat-card-label">Reavaliações Pendentes</div>
+                <div class="stat-card-value" id="stat-pending">0</div>
               </div>
-              <i class="fas fa-exclamation-triangle text-4xl text-orange-200"></i>
+              <div class="stat-card-icon orange"><i class="fas fa-exclamation-triangle"></i></div>
             </div>
+            <div class="stat-card-footer"><span class="stat-trend down"><i class="fas fa-arrow-down"></i><span id="trend-pending">0%</span></span><span>vs. mês anterior</span></div>
           </div>
         </div>
       </div>
 
       <!-- Pacientes -->
       <div id="patients-tab" class="tab-content hidden">
-        <div class="bg-white rounded-lg shadow p-6">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold">Pacientes</h2>
-            <button onclick="showNewPatientModal()" class="btn-primary">
-              <i class="fas fa-plus mr-2"></i>Novo Paciente
-            </button>
-          </div>
-          <div class="mb-4">
-            <input type="text" id="patient-search" placeholder="Buscar por nome ou CPF..." 
-                   class="w-full px-4 py-2 border rounded-lg" onkeyup="searchPatients()" />
-          </div>
-          <div id="patients-list">
-            <p class="text-gray-500 text-center py-8">Carregando pacientes...</p>
+        <div class="search-bar">
+          <i class="fas fa-search"></i>
+          <input type="text" id="patient-search" placeholder="Buscar por nome ou CPF..." onkeyup="searchPatients()" />
+        </div>
+        <div id="patients-list" class="patients-grid">
+          <div class="loading-state">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Carregando pacientes...</p>
           </div>
         </div>
       </div>
@@ -272,9 +282,39 @@
           </div>
         </div>
       </div>
+      
+      <!-- Agenda -->
+      <div id="agenda-tab" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <button class="btn-secondary" onclick="agendaPrevWeek()"><i class="fas fa-chevron-left"></i></button>
+              <button class="btn-secondary" onclick="agendaToday()">Hoje</button>
+              <button class="btn-secondary" onclick="agendaNextWeek()"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="text-lg font-bold" id="agenda-range"></div>
+            <div>
+              <button class="btn-primary" onclick="openNewAppointmentModal()"><i class="fas fa-calendar-plus mr-2"></i>Novo Agendamento</button>
+            </div>
+          </div>
+          <div id="agenda-calendar" class="space-y-2"></div>
+        </div>
+      </div>
+      <!-- Profissionais -->
+      <div id="professionals-tab" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="mb-4">
+            <h2 class="text-xl font-bold">Profissionais</h2>
+            <!-- Botão removido aqui; ação fica no page-actions do header -->
+          </div>
+          <div id="professionals-list">
+            <p class="text-gray-500 text-center py-8">Carregando profissionais...</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  </div>
+  </main>
 
   <!-- Drawer Base -->
   <section id="drawer" class="fixed inset-0 z-50 hidden" aria-hidden="true">
@@ -304,4 +344,7 @@
   <?!= include('index.js'); ?>
 </body>
 </html>
+
+
+
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * router.gs - Gerenciamento de Rotas e API
  * VERSÃO CORRIGIDA - Detalhes de Atendimento
@@ -168,8 +168,10 @@ function handleApiGet(e) {
           return { error: error.message, data: null };
         }
       
+            case "/api/agenda":
+        return getAgenda(params);
       default:
-        Logger.log('[handleApiGet] ⚠️ Rota não encontrada: ' + path);
+        Logger.log('[handleApiGet] Rota não encontrada: ' + path);
         return { error: 'Rota não encontrada: ' + path };
     }
     
@@ -277,6 +279,8 @@ function handleApiPost(path, body) {
       
       return { success: profUpdated, data: body };
 
+        case '/api/agenda':
+      return createAgendaEntry(body);
     case '/api/encounters/update':
       var updated = updateEncounter(body.encounter_id, body);
       return { success: updated };
@@ -466,3 +470,5 @@ function getFrontendPatients() {
     return [];
   }
 }
+
+
