@@ -144,4 +144,162 @@ body {
 
 /* Helpers */
 .hidden{ display:none; }
+
+<!-- ADICIONE ESTES ESTILOS NO index.css.html -->
+<style>
+/* ============================================================================
+   Agenda Semanal - Estilos Visuais
+   ============================================================================ */
+
+/* Container da agenda */
+#agenda-calendar {
+  font-size: 14px;
+  overflow-x: auto;
+  padding-bottom: 20px;
+}
+
+/* Grade responsiva */
+.grid {
+  display: grid;
+}
+
+.grid-cols-8 {
+  grid-template-columns: 60px repeat(7, 1fr);
+}
+
+/* Células de hora */
+#agenda-calendar .text-right {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+/* Células de dia */
+#agenda-calendar > div > div:not(:first-child) {
+  min-height: 64px;
+}
+
+/* Célula de agendamento */
+#agenda-calendar [data-slot] {
+  position: relative;
+  transition: all 0.2s ease;
+  border: 1px solid var(--gray-200);
+  background: white;
+}
+
+#agenda-calendar [data-slot]:hover {
+  background: #EFF6FF; /* blue-50 */
+  border-color: #3B82F6; /* blue-500 */
+  transform: scale(1.02);
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+}
+
+/* Evento agendado (pill) */
+#agenda-calendar [data-slot] > div {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #DBEAFE; /* blue-100 */
+  color: #1E40AF; /* blue-800 */
+  border-left: 3px solid #3B82F6; /* blue-500 */
+}
+
+/* Dia atual destacado */
+.bg-blue-100 {
+  background-color: #DBEAFE !important;
+  color: #1E40AF !important;
+}
+
+/* Modal de agendamento */
+#agenda-modal-wrapper .form-input:focus {
+  outline: none;
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Botão de navegação */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  color: var(--gray-700);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-400);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Indicador de período */
+#agenda-range {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+/* Responsividade */
+@media (max-width: 1024px) {
+  #agenda-calendar {
+    font-size: 12px;
+  }
+  
+  .grid-cols-8 {
+    grid-template-columns: 50px repeat(7, minmax(80px, 1fr));
+  }
+  
+  #agenda-calendar [data-slot] {
+    min-height: 50px;
+  }
+  
+  #agenda-calendar [data-slot] > div {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Em mobile, mostra apenas dia atual + próximos 2 dias */
+  .grid-cols-8 {
+    grid-template-columns: 50px repeat(3, 1fr);
+  }
+  
+  #agenda-calendar > div > div:nth-child(n+5) {
+    display: none;
+  }
+}
+
+/* Animação de carregamento */
+#agenda-calendar.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Estado vazio */
+.agenda-empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--gray-500);
+}
+
+.agenda-empty-state i {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+</style>
 </style>

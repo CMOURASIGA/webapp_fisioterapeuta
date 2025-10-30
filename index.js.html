@@ -438,9 +438,7 @@ function agendaPrevWeek(){ AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOf
 function agendaNextWeek(){ AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOfWeek.getDate()+7); fetchAgendaAndRender(); }
 function agendaToday(){ AGENDA_STATE.startOfWeek=__startOfWeek(new Date()); fetchAgendaAndRender(); }
 
-function fetchAgendaAndRender(){ var start=AGENDA_STATE.startOfWeek; var end=__endOfWeek(start); var rangeEl=document.getElementById('agenda-range'); if(rangeEl){ var fmt=function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); }; rangeEl.textContent = fmt(start)+' - '+fmt(end); }
-  showLoading();
-  google.script.run
+function fetchAgendaAndRender(){ var start=AGENDA_STATE.startOfWeek; var end=__endOfWeek(start); var rangeEl=document.getElementById('agenda-range'); if(rangeEl){ var fmt=function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); }; rangeEl.textContent = fmt(start)+' - '+fmt(end); } showLoading(); if(typeof google==='undefined'||!google.script||!google.script.run){ hideLoading(); renderAgendaWeek(); return; } google.script.run
     .withSuccessHandler(function(resp){ hideLoading(); var ev=(resp&&resp.data)||[]; AGENDA_STATE.events = Array.isArray(ev)?ev:[]; renderAgendaWeek(); })
     .withFailureHandler(function(err){ hideLoading(); showError('Erro ao carregar agenda: '+(err&&err.message||err||'')); renderAgendaWeek(); })
     .handleApiGet({ path: '/api/agenda', start: start.toISOString(), end: end.toISOString() });
@@ -545,7 +543,471 @@ function renderAppointmentModalImproved(slotISO){
   if(sel){ sel.addEventListener('change', function(){ if(title && !title.value){ var opt=sel.options[sel.selectedIndex]; if(opt){ title.value = 'Sessão com '+opt.text.replace(/\s*\(.*\)$/, ''); } } }); }
   if(startEl && endEl){ startEl.addEventListener('change', function(){ try{ var s=new Date(startEl.value); var e=new Date(s.getTime()+60*60000); endEl.value = (function(d){ var p=function(n){return ('0'+n).slice(-2)}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); })(e); endEl.min = startEl.value; }catch(_){} }); }
 }
+
+// ==================== AGENDA SEMANAL VISUAL ====================
+// Adicione este código ao final do index.js.html
+
+// Estado da agenda
+var AGENDA_STATE = {
+  startOfWeek: null,
+  events: []
+};
+
+/**
+ * Calcula início da semana (Segunda-feira)
+ */
+function getStartOfWeek(date) {
+  var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var day = d.getDay();
+  var diff = (day === 0 ? -6 : 1) - day; // Ajusta para Segunda
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Calcula fim da semana (Domingo)
+ */
+function getEndOfWeek(monday) {
+  var d = new Date(monday);
+  d.setDate(d.getDate() + 6);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/**
+ * Carrega aba da agenda
+ */
+function loadAgendaTab() {
+  if (!AGENDA_STATE.startOfWeek) {
+    AGENDA_STATE.startOfWeek = getStartOfWeek(new Date());
+  }
+  fetchAgendaAndRender();
+}
+
+/**
+ * Navegação: Semana anterior
+ */
+function agendaPrevWeek() {
+  AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOfWeek.getDate() - 7);
+  fetchAgendaAndRender();
+}
+
+/**
+ * Navegação: Próxima semana
+ */
+function agendaNextWeek() {
+  AGENDA_STATE.startOfWeek.setDate(AGENDA_STATE.startOfWeek.getDate() + 7);
+  fetchAgendaAndRender();
+}
+
+/**
+ * Navegação: Volta para hoje
+ */
+function agendaToday() {
+  AGENDA_STATE.startOfWeek = getStartOfWeek(new Date());
+  fetchAgendaAndRender();
+}
+
+/**
+ * Busca agendamentos e renderiza
+ */
+function fetchAgendaAndRender() {
+  var start = AGENDA_STATE.startOfWeek;
+  var end = getEndOfWeek(start);
+  
+  // Atualiza cabeçalho com período
+  var rangeEl = document.getElementById('agenda-range');
+  if (rangeEl) {
+    var formatDate = function(d) {
+      return ('0' + d.getDate()).slice(-2) + '/' + 
+             ('0' + (d.getMonth() + 1)).slice(-2);
+    };
+    rangeEl.textContent = formatDate(start) + ' - ' + formatDate(end);
+  }
+  
+  showLoading();
+  
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      hideLoading();
+      var events = (resp && resp.data) || [];
+      AGENDA_STATE.events = Array.isArray(events) ? events : [];
+      renderAgendaWeek();
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showError('Erro ao carregar agenda: ' + (err.message || err));
+      renderAgendaWeek();
+    })
+    .handleApiGet({
+      path: '/api/agenda',
+      start: start.toISOString(),
+      end: end.toISOString()
+    });
+}
+
+/**
+ * Renderiza grade semanal
+ */
+function renderAgendaWeek() {
+  var container = document.getElementById('agenda-calendar');
+  if (!container) return;
+  
+  var monday = AGENDA_STATE.startOfWeek;
+  var days = [];
+  
+  // Gera array com os 7 dias da semana
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+  
+  // Horários (8h às 18h)
+  var hours = [];
+  for (var h = 8; h <= 18; h++) {
+    hours.push(h);
+  }
+  
+  var weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  
+  var html = '';
+  
+  // Cabeçalho dos dias
+  html += '<div class="grid grid-cols-8 gap-2 mb-2">';
+  html += '<div></div>'; // Espaço para coluna de horas
+  
+  for (var k = 0; k < 7; k++) {
+    var isToday = isSameDay(days[k], new Date());
+    var dayClass = isToday ? 'bg-blue-100 font-bold text-blue-800' : '';
+    
+    html += '<div class="text-center font-semibold py-2 rounded ' + dayClass + '">';
+    html += weekDays[k] + ' ' + ('0' + days[k].getDate()).slice(-2);
+    html += '</div>';
+  }
+  html += '</div>';
+  
+  // Grade de horários
+  hours.forEach(function(hour) {
+    html += '<div class="grid grid-cols-8 gap-2 items-stretch">';
+    
+    // Coluna de hora
+    html += '<div class="text-right pr-2 text-sm text-gray-500 py-2">';
+    html += ('0' + hour).slice(-2) + ':00';
+    html += '</div>';
+    
+    // Células de cada dia
+    for (var c = 0; c < 7; c++) {
+      var cellDate = new Date(days[c]);
+      cellDate.setHours(hour, 0, 0, 0);
+      var cellISO = cellDate.toISOString();
+      
+      // Busca eventos neste horário
+      var cellEvents = AGENDA_STATE.events.filter(function(ev) {
+        try {
+          var evStart = new Date(ev.start);
+          return evStart.getFullYear() === cellDate.getFullYear() &&
+                 evStart.getMonth() === cellDate.getMonth() &&
+                 evStart.getDate() === cellDate.getDate() &&
+                 evStart.getHours() === cellDate.getHours();
+        } catch (e) {
+          return false;
+        }
+      });
+      
+      // Renderiza eventos
+      var pills = cellEvents.map(function(ev) {
+        var title = escapeHtml(ev.title || 'Sessão');
+        return '<div class="text-xs bg-blue-100 text-blue-800 rounded px-1 py-0.5 truncate" title="' + title + '">' + 
+               title + '</div>';
+      }).join('');
+      
+      html += '<div class="bg-white border rounded p-2 h-16 hover:bg-blue-50 cursor-pointer transition-colors" ' +
+              'data-slot="' + cellISO + '" ' +
+              'onclick="openNewAppointmentModal(this.getAttribute(\'data-slot\'))">';
+      html += pills;
+      html += '</div>';
+    }
+    
+    html += '</div>';
+  });
+  
+  container.innerHTML = html;
+}
+
+/**
+ * Verifica se duas datas são do mesmo dia
+ */
+function isSameDay(d1, d2) {
+  return d1.getFullYear() === d2.getFullYear() &&
+         d1.getMonth() === d2.getMonth() &&
+         d1.getDate() === d2.getDate();
+}
+
+/**
+ * Abre modal de novo agendamento
+ */
+function openNewAppointmentModal(slotISO) {
+  // Garante que pacientes estão carregados
+  ensurePatientsLoaded(function() {
+    renderAppointmentModal(slotISO);
+  });
+}
+
+/**
+ * Garante que pacientes estão carregados
+ */
+function ensurePatientsLoaded(callback) {
+  if (Array.isArray(INITIAL_PATIENTS) && INITIAL_PATIENTS.length > 0) {
+    callback();
+    return;
+  }
+  
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(patients) {
+      hideLoading();
+      INITIAL_PATIENTS = Array.isArray(patients) ? patients : [];
+      callback();
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showError('Erro ao carregar pacientes: ' + (err.message || err));
+      callback();
+    })
+    .getFrontendPatients();
+}
+
+/**
+ * Renderiza modal de agendamento
+ */
+function renderAppointmentModal(slotISO) {
+  // Calcula horários padrão
+  var startDate = slotISO ? new Date(slotISO) : new Date();
+  var endDate = new Date(startDate.getTime() + 60 * 60000); // +1 hora
+  
+  var formatLocalDateTime = function(date) {
+    var pad = function(n) { return ('0' + n).slice(-2); };
+    return date.getFullYear() + '-' + 
+           pad(date.getMonth() + 1) + '-' + 
+           pad(date.getDate()) + 'T' + 
+           pad(date.getHours()) + ':' + 
+           pad(date.getMinutes());
+  };
+  
+  var startValue = formatLocalDateTime(startDate);
+  var endValue = formatLocalDateTime(endDate);
+  
+  var wrapper = document.createElement('div');
+  wrapper.id = 'agenda-modal-wrapper';
+  
+  wrapper.innerHTML = 
+    '<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">' +
+      '<div class="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4">' +
+        '<div class="bg-blue-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center">' +
+          '<h3 class="text-lg font-bold">' +
+            '<i class="fas fa-calendar-plus mr-2"></i>Novo Agendamento' +
+          '</h3>' +
+          '<button onclick="closeAgendaModal()" class="text-white hover:text-gray-200">' +
+            '<i class="fas fa-times"></i>' +
+          '</button>' +
+        '</div>' +
+        
+        '<form id="agenda-form" class="p-6 space-y-4">' +
+          // Seleção de paciente
+          '<div>' +
+            '<label class="block text-sm font-medium text-gray-700 mb-1">' +
+              'Paciente <span class="text-red-500">*</span>' +
+            '</label>' +
+            '<select id="agenda-patient" required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">' +
+              '<option value="">Selecione um paciente...</option>' +
+              (INITIAL_PATIENTS || []).map(function(p) {
+                return '<option value="' + p.id + '">' + 
+                       escapeHtml(p.full_name) + ' (' + calculateAge(p.birth_date) + ' anos)' +
+                       '</option>';
+              }).join('') +
+            '</select>' +
+          '</div>' +
+          
+          // Data/hora início e fim
+          '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
+            '<div>' +
+              '<label class="block text-sm font-medium text-gray-700 mb-1">' +
+                'Início <span class="text-red-500">*</span>' +
+              '</label>' +
+              '<input id="agenda-start" type="datetime-local" value="' + startValue + '" ' +
+                     'required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">' +
+            '</div>' +
+            '<div>' +
+              '<label class="block text-sm font-medium text-gray-700 mb-1">' +
+                'Fim <span class="text-red-500">*</span>' +
+              '</label>' +
+              '<input id="agenda-end" type="datetime-local" value="' + endValue + '" ' +
+                     'required class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">' +
+            '</div>' +
+          '</div>' +
+          
+          // Título (opcional)
+          '<div>' +
+            '<label class="block text-sm font-medium text-gray-700 mb-1">' +
+              'Título (opcional)' +
+            '</label>' +
+            '<input id="agenda-title" type="text" ' +
+                   'class="form-input w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" ' +
+                   'placeholder="Sessão de fisioterapia">' +
+          '</div>' +
+          
+          // Botões
+          '<div class="flex justify-end gap-2 pt-4 border-t">' +
+            '<button type="button" onclick="closeAgendaModal()" ' +
+                    'class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">' +
+              'Cancelar' +
+            '</button>' +
+            '<button type="submit" class="btn-primary px-6 py-2">' +
+              '<i class="fas fa-save mr-2"></i>Salvar Agendamento' +
+            '</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>';
+  
+  document.body.appendChild(wrapper);
+  
+  // Adiciona evento de submit
+  var form = document.getElementById('agenda-form');
+  if (form) {
+    form.addEventListener('submit', handleAgendaSubmit);
+  }
+  
+  // Auto-preenche título quando seleciona paciente
+  var patientSelect = document.getElementById('agenda-patient');
+  var titleInput = document.getElementById('agenda-title');
+  
+  if (patientSelect && titleInput) {
+    patientSelect.addEventListener('change', function() {
+      if (!titleInput.value) {
+        var selectedOption = patientSelect.options[patientSelect.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+          var patientName = selectedOption.text.replace(/\s*\(.*\)$/, '');
+          titleInput.value = 'Sessão com ' + patientName;
+        }
+      }
+    });
+  }
+  
+  // Atualiza fim automaticamente quando muda início
+  var startInput = document.getElementById('agenda-start');
+  var endInput = document.getElementById('agenda-end');
+  
+  if (startInput && endInput) {
+    startInput.addEventListener('change', function() {
+      try {
+        var start = new Date(startInput.value);
+        var end = new Date(start.getTime() + 60 * 60000);
+        endInput.value = formatLocalDateTime(end);
+        endInput.min = startInput.value;
+      } catch (e) {}
+    });
+  }
+}
+
+/**
+ * Fecha modal de agendamento
+ */
+function closeAgendaModal() {
+  var wrapper = document.getElementById('agenda-modal-wrapper');
+  if (wrapper) {
+    wrapper.remove();
+  }
+}
+
+/**
+ * Submete novo agendamento
+ */
+function handleAgendaSubmit(e) {
+  e.preventDefault();
+  
+  var patientId = document.getElementById('agenda-patient').value;
+  var title = document.getElementById('agenda-title').value.trim();
+  var start = document.getElementById('agenda-start').value;
+  var end = document.getElementById('agenda-end').value;
+  
+  if (!patientId || !start || !end) {
+    showError('Preencha paciente, início e fim do agendamento');
+    return;
+  }
+  
+  // Valida datas
+  try {
+    var startDate = new Date(start);
+    var endDate = new Date(end);
+    
+    if (endDate <= startDate) {
+      showError('A data de fim deve ser posterior à data de início');
+      return;
+    }
+  } catch (error) {
+    showError('Datas inválidas');
+    return;
+  }
+  
+  showLoading();
+  
+  var data = {
+    patient_id: patientId,
+    title: title || 'Sessão de fisioterapia',
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString()
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      hideLoading();
+      
+      if (resp && resp.success) {
+        showSuccess('Agendamento criado com sucesso!');
+        closeAgendaModal();
+        fetchAgendaAndRender();
+      } else {
+        showError('Falha ao criar agendamento: ' + (resp.error || 'Erro desconhecido'));
+      }
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showError('Erro ao criar agendamento: ' + (err.message || err));
+    })
+    .handleApiPost('/api/agenda', data);
+}
+
 </script>
 
 
 
+
+<script>
+function openAgendaDetails(id){ if(!id){ return; } showLoading(); google.script.run.withSuccessHandler(function(resp){ hideLoading(); var ev=(resp&&resp.data)||null; if(!ev){ showError('Agendamento não encontrado'); return; } showAgendaDetailsModal(ev); }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao carregar agendamento: '+(err&&err.message||err||'')); }).handleApiGet({ path: '/api/agenda', id: id }); }
+function showAgendaDetailsModal(ev){ var w=document.createElement('div'); w.id='agenda-details-wrapper'; var dStart=new Date(ev.start); var dEnd=new Date(ev.end); var fmt=function(d){ var p=function(n){return ('0'+n).slice(-2)}; return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); }; w.innerHTML=''
+  +'<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">'
+  +  '<div class="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">'
+  +    '<div class="bg-blue-600 text-white px-6 py-3 rounded-t-lg flex justify-between items-center">'
+  +      '<h3 class="text-lg font-bold"><i class="fas fa-calendar-alt mr-2"></i>Agendamento</h3>'
+  +      '<button onclick="closeAgendaDetailsModal()" class="text-white hover:text-gray-200"><i class="fas fa-times"></i></button>'
+  +    '</div>'
+  +    '<div class="p-6 space-y-3">'
+  +      '<div><span class="text-gray-500 text-xs">Título</span><div class="font-medium">'+escapeHtml(ev.title||'Sessão')+'</div></div>'
+  +      '<div><span class="text-gray-500 text-xs">Início</span><div class="font-medium">'+fmt(dStart)+'</div></div>'
+  +      '<div><span class="text-gray-500 text-xs">Fim</span><div class="font-medium">'+fmt(dEnd)+'</div></div>'
+  +    '</div>'
+  +    '<div class="p-4 border-t flex justify-end gap-2">'
+  +      '<button onclick="closeAgendaDetailsModal()" class="px-4 py-2 border rounded">Fechar</button>'
+  +      '<button onclick="deleteAgenda(\''+(ev.id||'')+'\')" class="btn-primary px-4 py-2 bg-red-600 hover:bg-red-700"><i class="fas fa-trash mr-2"></i>Excluir</button>'
+  +    '</div>'
+  +  '</div>'
+  +'</div>';
+  document.body.appendChild(w);
+}
+function closeAgendaDetailsModal(){ var w=document.getElementById('agenda-details-wrapper'); if(w) w.remove(); }
+function deleteAgenda(id){ if(!id) return; showLoading(); google.script.run.withSuccessHandler(function(resp){ hideLoading(); if(resp&&resp.success){ showSuccess('Agendamento excluído'); closeAgendaDetailsModal(); fetchAgendaAndRender(); } else { showError('Falha ao excluir'); } }).withFailureHandler(function(err){ hideLoading(); showError('Erro ao excluir: '+(err&&err.message||err||'')); }).handleApiPost('/api/agenda/delete', { id: id }); }
+</script>

@@ -168,7 +168,7 @@ function handleApiGet(e) {
           return { error: error.message, data: null };
         }
       
-            case "/api/agenda":
+      case '/api/agenda':
         return getAgenda(params);
       default:
         Logger.log('[handleApiGet] Rota não encontrada: ' + path);
@@ -279,8 +279,14 @@ function handleApiPost(path, body) {
       
       return { success: profUpdated, data: body };
 
-        case '/api/agenda':
+    case '/api/agenda':
       return createAgendaEntry(body);
+      
+    case '/api/agenda/update':
+      return updateAgendaEntry(body.id, body);
+      
+    case '/api/agenda/delete':
+      return deleteAgendaEntry(body.id);
     case '/api/encounters/update':
       var updated = updateEncounter(body.encounter_id, body);
       return { success: updated };
